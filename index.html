@@ -439,7 +439,8 @@
                 <!-- Test QR Code for debugging -->
                 <div class="form-group" style="width: 100%; max-width: 400px; margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px;">
                     <label>اختبار الماسح (للتطوير فقط)</label>
-                    <button type="button" class="btn" onclick="generateTestQR()" style="background: #34E49B; margin-bottom: 10px;">إنشاء رمز QR تجريبي</button>
+                    <button type="button" class="btn" onclick="createTestRegistration()" style="background: #28a745; margin-bottom: 10px;">إنشاء تسجيل تجريبي</button>
+                    <button type="button" class="btn" onclick="generateTestQR()" style="background: #34E49B; margin-bottom: 10px; margin-right: 10px;">إنشاء رمز QR تجريبي</button>
                     <button type="button" class="btn" onclick="checkScannerStatus()" style="background: #ff6b6b; margin-bottom: 10px; margin-right: 10px;">فحص حالة الماسح</button>
                     <button type="button" class="btn" onclick="testJsQRDirectly()" style="background: #ffa500; margin-bottom: 10px; margin-right: 10px;">اختبار jsQR مباشرة</button>
                     <div id="testQRContainer" style="text-align: center;"></div>
@@ -1132,22 +1133,29 @@
                     console.log('Parsed JSON data:', data);
                     if (data.id) {
                         registrationId = data.id;
+                        console.log('Extracted registration ID from JSON:', registrationId);
                     }
                 } catch (e) {
                     console.log('Not JSON, treating as simple string');
                     // If not JSON, treat as simple ID string
                     registrationId = qrData.trim();
+                    console.log('Using raw data as registration ID:', registrationId);
                 }
                 
                 console.log('Final registration ID:', registrationId);
+                console.log('Available registrations:', registrations.map(r => r.id));
+                console.log('Total registrations in system:', registrations.length);
                 
                 if (registrationId) {
                     setScannerStatus('تم اكتشاف رمز QR - جاري التحقق...', 'scanning');
                     
+                    // Show debug info
+                    showQRDebugInfo(qrData, registrationId);
+                    
                     // Automatically mark attendance
                     markAttendanceById(registrationId);
                 } else {
-                    setScannerStatus('رمز QR غير صالح', 'error');
+                    setScannerStatus('رمز QR غير صالح - لا يحتوي على معرف', 'error');
                     resumeScanningAfterDelay(2000);
                 }
                 
@@ -1156,6 +1164,23 @@
                 setScannerStatus('خطأ في قراءة رمز QR: ' + error.message, 'error');
                 resumeScanningAfterDelay(2000);
             }
+        }
+
+        function showQRDebugInfo(rawData, extractedId) {
+            const resultDiv = document.getElementById('scanResult');
+            
+            resultDiv.innerHTML = `
+                <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin: 10px 0; border: 2px solid #4dabf7; font-size: 14px;">
+                    <h4 style="color: #1c7ed6; margin-bottom: 10px;">🔍 معلومات QR المسحوب:</h4>
+                    <p><strong>البيانات الخام:</strong> <code style="background: #e9ecef; padding: 2px 4px; border-radius: 4px;">${rawData}</code></p>
+                    <p><strong>معرف التسجيل المستخرج:</strong> <code style="background: #e9ecef; padding: 2px 4px; border-radius: 4px;">${extractedId}</code></p>
+                    <p><strong>عدد التسجيلات في النظام:</strong> ${registrations.length}</p>
+                    ${registrations.length > 0 ? 
+                        `<p><strong>معرفات التسجيل المتاحة:</strong><br>${registrations.map(r => `• ${r.id} (${r.parent.name})`).join('<br>')}</p>` 
+                        : '<p style="color: red;"><strong>⚠️ لا توجد تسجيلات في النظام!</strong></p>'
+                    }
+                </div>
+            `;
         }
 
         function resumeScanningAfterDelay(delay = 3000) {
@@ -1541,26 +1566,83 @@
             });
         }
 
+        // Create test registration for debugging
+        function createTestRegistration() {
+            const testId = 'TEST_' + Date.now();
+            
+            const testRegistration = {
+                id: testId,
+                timestamp: new Date().toISOString(),
+                attendanceDay: 'day1',
+                dayInfo: dayInfo['day1'],
+                parent: {
+                    name: 'أحمد محمد علي (تجريبي)',
+                    age: 35,
+                    phone: '0501234567',
+                    id: '1234567890',
+                    gender: 'ذكر',
+                    nationality: 'سعودي',
+                    nationalityName: 'سعودي'
+                },
+                children: [
+                    {
+                        name: 'سارة أحمد محمد (تجريبي)',
+                        age: 10,
+                        id: '2234567890',
+                        gender: 'أنثى',
+                        nationality: 'سعودي',
+                        nationalityName: 'سعودي'
+                    }
+                ]
+            };
+            
+            registrations.push(testRegistration);
+            localStorage.setItem('registrations', JSON.stringify(registrations));
+            
+            updateCapacityDisplay();
+            updateStats();
+            displayAttendees();
+            
+            const testContainer = document.getElementById('testQRContainer');
+            testContainer.innerHTML = `
+                <div style="background: #d4edda; color: #155724; padding: 10px; border-radius: 8px; margin-top: 10px;">
+                    ✅ تم إنشاء تسجيل تجريبي بنجاح!<br>
+                    <strong>معرف التسجيل:</strong> ${testId}<br>
+                    <strong>اسم ولي الأمر:</strong> ${testRegistration.parent.name}
+                </div>
+            `;
+            
+            console.log('Test registration created:', testRegistration);
+            showMessage('تم إنشاء تسجيل تجريبي بنجاح', 'success');
+        }
+
         // Test QR generation for debugging
         function generateTestQR() {
             if (registrations.length === 0) {
-                showMessage('لا توجد تسجيلات لإنشاء رمز QR تجريبي', 'error');
+                const testContainer = document.getElementById('testQRContainer');
+                testContainer.innerHTML = `
+                    <div style="background: #f8d7da; color: #721c24; padding: 10px; border-radius: 8px; margin-top: 10px;">
+                        ⚠️ لا توجد تسجيلات لإنشاء رمز QR تجريبي<br>
+                        اضغط على "إنشاء تسجيل تجريبي" أولاً
+                    </div>
+                `;
                 return;
             }
             
-            // Get the first registration
-            const testRegistration = registrations[0];
+            // Get the latest registration
+            const testRegistration = registrations[registrations.length - 1];
             
             const testContainer = document.getElementById('testQRContainer');
             testContainer.innerHTML = '';
             
             // Create canvas for test QR
             const canvas = document.createElement('canvas');
-            canvas.width = 150;
-            canvas.height = 150;
+            canvas.width = 200;
+            canvas.height = 200;
             canvas.style.border = '2px solid #9565D3';
             canvas.style.borderRadius = '8px';
             canvas.style.background = 'white';
+            canvas.style.marginTop = '10px';
             
             if (typeof QRious !== 'undefined') {
                 try {
@@ -1576,27 +1658,34 @@
                     const qr = new QRious({
                         element: canvas,
                         value: JSON.stringify(qrData),
-                        size: 150,
+                        size: 200,
                         background: 'white',
                         foreground: '#9565D3'
                     });
                     
                     testContainer.appendChild(canvas);
                     
-                    const info = document.createElement('p');
-                    info.innerHTML = `<small>رمز تجريبي للتسجيل: ${testRegistration.id}<br>اسم ولي الأمر: ${testRegistration.parent.name}</small>`;
-                    info.style.marginTop = '10px';
-                    info.style.color = '#666';
+                    const info = document.createElement('div');
+                    info.innerHTML = `
+                        <div style="background: white; padding: 10px; border-radius: 8px; margin-top: 10px; text-align: right;">
+                            <h5 style="color: #9565D3;">رمز QR تجريبي:</h5>
+                            <p><strong>معرف التسجيل:</strong> ${testRegistration.id}</p>
+                            <p><strong>اسم ولي الأمر:</strong> ${testRegistration.parent.name}</p>
+                            <p><strong>عدد الأطفال:</strong> ${testRegistration.children.length}</p>
+                            <p style="font-size: 12px; color: #666;">امسح هذا الرمز بالكاميرا لاختبار النظام</p>
+                        </div>
+                    `;
                     testContainer.appendChild(info);
                     
                     console.log('Test QR generated with data:', qrData);
+                    showMessage('تم إنشاء رمز QR تجريبي بنجاح', 'success');
                     
                 } catch (error) {
                     console.error('Test QR generation error:', error);
-                    testContainer.innerHTML = '<p style="color: red;">خطأ في إنشاء رمز QR التجريبي</p>';
+                    testContainer.innerHTML = '<p style="color: red;">خطأ في إنشاء رمز QR التجريبي: ' + error.message + '</p>';
                 }
             } else {
-                testContainer.innerHTML = '<p style="color: red;">مكتبة QRious غير متاحة</p>';
+                testContainer.innerHTML = '<p style="color: red;">مكتبة QRious غير متاحة لإنشاء الرمز</p>';
             }
         }
         document.addEventListener('visibilitychange', function() {
