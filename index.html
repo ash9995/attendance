@@ -442,14 +442,13 @@
                     <button type="button" class="btn" onclick="createTestRegistration()" style="background: #28a745; margin-bottom: 10px;">إنشاء تسجيل تجريبي</button>
                     <button type="button" class="btn" onclick="generateTestQR()" style="background: #34E49B; margin-bottom: 10px; margin-right: 10px;">إنشاء رمز QR تجريبي</button>
                     <button type="button" class="btn" onclick="checkScannerStatus()" style="background: #ff6b6b; margin-bottom: 10px; margin-right: 10px;">فحص حالة الماسح</button>
-                    <button type="button" class="btn" onclick="testJsQRDirectly()" style="background: #ffa500; margin-bottom: 10px; margin-right: 10px;">اختبار jsQR مباشرة</button>
                     
-                    <!-- Device Data Issue Warning -->
-                    <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 8px; margin-top: 15px; text-align: right;">
-                        <h5 style="color: #856404; margin-bottom: 10px;">⚠️ مشكلة شائعة - أجهزة متعددة:</h5>
-                        <p style="color: #856404; font-size: 13px; margin-bottom: 10px;">إذا كنت تمسح QR من جهاز آخر غير الذي تم التسجيل عليه، ستواجه خطأ "رمز التسجيل غير موجود"</p>
-                        <p style="color: #856404; font-size: 13px; margin-bottom: 10px;"><strong>السبب:</strong> كل جهاز يحتفظ ببياناته منفصلة</p>
-                        <p style="color: #856404; font-size: 13px;"><strong>الحل:</strong> استخدم "تصدير البيانات للمشاركة" من جهاز التسجيل، ثم "استيراد البيانات المشتركة" على جهاز المسح</p>
+                    <!-- Simple explanation -->
+                    <div style="background: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; border-radius: 8px; margin-top: 15px; text-align: right;">
+                        <h5 style="color: #0c5460; margin-bottom: 10px;">💡 رموز QR المحدثة:</h5>
+                        <p style="color: #0c5460; font-size: 13px; margin-bottom: 5px;">• رموز QR الآن تحتوي على جميع البيانات المطلوبة</p>
+                        <p style="color: #0c5460; font-size: 13px; margin-bottom: 5px;">• تعمل على أي جهاز دون الحاجة لاستيراد البيانات</p>
+                        <p style="color: #0c5460; font-size: 13px;">• امسح الرمز وسيتم تسجيل الحضور تلقائياً</p>
                     </div>
                     
                     <div id="testQRContainer" style="text-align: center;"></div>
@@ -484,12 +483,6 @@
             
             <div class="admin-panel">
                 <button class="btn btn-success" onclick="exportToExcel()">تصدير البيانات إلى Excel</button>
-                <button class="btn" onclick="exportDataForSharing()" style="background: #17a2b8; margin-right: 10px;">تصدير البيانات للمشاركة</button>
-                <button class="btn" onclick="importSharedData()" style="background: #6c757d; margin-right: 10px;">استيراد البيانات المشتركة</button>
-                <label class="btn" style="background: #6f42c1; margin-right: 10px; cursor: pointer;">
-                    استيراد ملف
-                    <input type="file" accept=".json" onchange="handleFileImport(event)" style="display: none;">
-                </label>
                 <button class="btn" onclick="clearAllData()" style="background: #ff4757; margin-right: 10px;">مسح جميع البيانات</button>
                 <button class="btn" onclick="adminLogout()" style="background: #9565D3; margin-right: 10px;">تسجيل الخروج</button>
             </div>
@@ -895,16 +888,27 @@
                 </div>
             `;
             
-            // Generate QR code
+            // Generate QR code with COMPLETE registration data (self-contained)
             const canvas = document.getElementById('qrCanvas');
             if (canvas && typeof QRious !== 'undefined') {
                 try {
+                    // Include ALL registration data in QR code
                     const qrData = {
+                        type: 'REGISTRATION',
                         id: registration.id,
-                        parent: registration.parent.name,
+                        parent: {
+                            name: registration.parent.name,
+                            phone: registration.parent.phone,
+                            nationality: registration.parent.nationalityName
+                        },
+                        children: registration.children.map(child => ({
+                            name: child.name,
+                            age: child.age,
+                            nationality: child.nationalityName
+                        })),
                         day: registration.attendanceDay,
+                        dayName: registration.dayInfo.name,
                         date: registration.dayInfo.date,
-                        children: registration.children.length,
                         timestamp: registration.timestamp
                     };
                     
@@ -917,7 +921,7 @@
                         level: 'M'
                     });
                     
-                    console.log('QR Code generated successfully!', qrData);
+                    console.log('Self-contained QR Code generated!', qrData);
                     
                 } catch (error) {
                     console.error('QR generation error:', error);
@@ -1140,38 +1144,84 @@
             isScanning = false;
             
             try {
-                let registrationId = null;
+                let registrationData = null;
                 
-                // Try to parse as JSON first (new format)
+                // Try to parse as JSON first
                 try {
                     const data = JSON.parse(qrData);
                     console.log('Parsed JSON data:', data);
-                    if (data.id) {
-                        registrationId = data.id;
-                        console.log('Extracted registration ID from JSON:', registrationId);
+                    
+                    // Check if it's a self-contained registration QR code
+                    if (data.type === 'REGISTRATION' && data.id && data.parent && data.children) {
+                        console.log('Self-contained QR code detected');
+                        registrationData = data;
+                    } 
+                    // Legacy format - has ID but need to look up
+                    else if (data.id) {
+                        console.log('Legacy QR format - looking up registration');
+                        const registration = registrations.find(reg => reg.id === data.id);
+                        if (registration) {
+                            registrationData = {
+                                type: 'REGISTRATION',
+                                id: registration.id,
+                                parent: {
+                                    name: registration.parent.name,
+                                    phone: registration.parent.phone,
+                                    nationality: registration.parent.nationalityName
+                                },
+                                children: registration.children.map(child => ({
+                                    name: child.name,
+                                    age: child.age,
+                                    nationality: child.nationalityName
+                                })),
+                                day: registration.attendanceDay,
+                                dayName: registration.dayInfo ? registration.dayInfo.name : 'غير محدد',
+                                date: registration.dayInfo ? registration.dayInfo.date : '',
+                                timestamp: registration.timestamp
+                            };
+                        }
                     }
                 } catch (e) {
-                    console.log('Not JSON, treating as simple string');
-                    // If not JSON, treat as simple ID string
-                    registrationId = qrData.trim();
-                    console.log('Using raw data as registration ID:', registrationId);
+                    console.log('Not JSON, treating as simple string - looking up registration');
+                    // Simple string format - look up registration
+                    const registrationId = qrData.trim();
+                    const registration = registrations.find(reg => reg.id === registrationId);
+                    if (registration) {
+                        registrationData = {
+                            type: 'REGISTRATION',
+                            id: registration.id,
+                            parent: {
+                                name: registration.parent.name,
+                                phone: registration.parent.phone,
+                                nationality: registration.parent.nationalityName
+                            },
+                            children: registration.children.map(child => ({
+                                name: child.name,
+                                age: child.age,
+                                nationality: child.nationalityName
+                            })),
+                            day: registration.attendanceDay,
+                            dayName: registration.dayInfo ? registration.dayInfo.name : 'غير محدد',
+                            date: registration.dayInfo ? registration.dayInfo.date : '',
+                            timestamp: registration.timestamp
+                        };
+                    }
                 }
                 
-                console.log('Final registration ID:', registrationId);
-                console.log('Available registrations:', registrations.map(r => r.id));
-                console.log('Total registrations in system:', registrations.length);
+                console.log('Final registration data:', registrationData);
                 
-                if (registrationId) {
+                if (registrationData) {
                     setScannerStatus('تم اكتشاف رمز QR - جاري التحقق...', 'scanning');
                     
                     // Show debug info
-                    showQRDebugInfo(qrData, registrationId);
+                    showQRDebugInfo(qrData, registrationData);
                     
-                    // Automatically mark attendance
-                    markAttendanceById(registrationId);
+                    // Mark attendance using the QR data directly
+                    markAttendanceFromQR(registrationData);
                 } else {
-                    setScannerStatus('رمز QR غير صالح - لا يحتوي على معرف', 'error');
-                    resumeScanningAfterDelay(2000);
+                    setScannerStatus('رمز QR غير صالح أو غير موجود', 'error');
+                    showQRDebugInfo(qrData, null);
+                    resumeScanningAfterDelay(3000);
                 }
                 
             } catch (error) {
@@ -1181,25 +1231,98 @@
             }
         }
 
-        function showQRDebugInfo(rawData, extractedId) {
+        function showQRDebugInfo(rawData, registrationData) {
             const resultDiv = document.getElementById('scanResult');
             
+            if (registrationData) {
+                resultDiv.innerHTML = `
+                    <div style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin: 10px 0; border: 2px solid #2ed573; font-size: 14px;">
+                        <h4 style="color: #2ed573; margin-bottom: 10px;">✅ تم اكتشاف QR صالح:</h4>
+                        <p><strong>معرف التسجيل:</strong> ${registrationData.id}</p>
+                        <p><strong>ولي الأمر:</strong> ${registrationData.parent.name}</p>
+                        <p><strong>عدد الأطفال:</strong> ${registrationData.children.length}</p>
+                        <p><strong>يوم الحضور:</strong> ${registrationData.dayName}</p>
+                    </div>
+                `;
+            } else {
+                const extractedId = rawData.includes('{') ? 'JSON غير صالح' : rawData.trim();
+                resultDiv.innerHTML = `
+                    <div style="background: #f8d7da; padding: 15px; border-radius: 8px; margin: 10px 0; border: 2px solid #dc3545; font-size: 14px;">
+                        <h4 style="color: #dc3545; margin-bottom: 10px;">❌ رمز QR غير صالح:</h4>
+                        <p><strong>البيانات المسحوبة:</strong> <code style="background: #e9ecef; padding: 2px 4px; border-radius: 4px;">${rawData.substring(0, 100)}${rawData.length > 100 ? '...' : ''}</code></p>
+                        <p><strong>معرف مستخرج:</strong> ${extractedId}</p>
+                        <p><strong>عدد التسجيلات في النظام:</strong> ${registrations.length}</p>
+                        ${registrations.length > 0 ? 
+                            `<p><strong>معرفات متاحة:</strong><br>${registrations.slice(0, 3).map(r => `• ${r.id} (${r.parent.name})`).join('<br>')}${registrations.length > 3 ? '<br>...' : ''}</p>` 
+                            : `<p style="color: #856404;"><strong>💡 نصيحة:</strong> هذا الجهاز لا يحتوي على تسجيلات. يمكنك إنشاء تسجيل تجريبي للاختبار.</p>`
+                        }
+                    </div>
+                `;
+            }
+        }
+
+        // Mark attendance using data from QR code directly (no lookup needed)
+        function markAttendanceFromQR(registrationData) {
+            console.log('Marking attendance from QR data:', registrationData);
+            
+            const resultDiv = document.getElementById('scanResult');
+            
+            // Check if already attended
+            if (attendees.some(att => att.registrationId === registrationData.id)) {
+                const errorMsg = 'تم تسجيل الحضور مسبقاً لهذا المسجل';
+                console.log('Already attended:', registrationData.id);
+                setScannerStatus(errorMsg, 'error');
+                
+                resultDiv.innerHTML = `<div class="error">${errorMsg}</div>`;
+                resumeScanningAfterDelay(3000);
+                
+                setTimeout(() => {
+                    resultDiv.innerHTML = '';
+                }, 5000);
+                
+                return;
+            }
+            
+            // Create attendance record
+            const attendance = {
+                registrationId: registrationData.id,
+                timestamp: new Date().toISOString(),
+                parent: registrationData.parent,
+                children: registrationData.children,
+                dayInfo: {
+                    name: registrationData.dayName,
+                    date: registrationData.date
+                },
+                source: 'qr_scan' // Mark as scanned from QR
+            };
+            
+            attendees.push(attendance);
+            localStorage.setItem('attendees', JSON.stringify(attendees));
+            
+            console.log('Attendance marked successfully from QR:', registrationData.id);
+            
+            const successMsg = '✅ تم تسجيل الحضور بنجاح!';
+            setScannerStatus(successMsg, 'success');
+            
             resultDiv.innerHTML = `
-                <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin: 10px 0; border: 2px solid #4dabf7; font-size: 14px;">
-                    <h4 style="color: #1c7ed6; margin-bottom: 10px;">🔍 معلومات QR المسحوب:</h4>
-                    <p><strong>البيانات الخام:</strong> <code style="background: #e9ecef; padding: 2px 4px; border-radius: 4px;">${rawData}</code></p>
-                    <p><strong>معرف التسجيل المستخرج:</strong> <code style="background: #e9ecef; padding: 2px 4px; border-radius: 4px;">${extractedId}</code></p>
-                    <p><strong>عدد التسجيلات في النظام:</strong> ${registrations.length}</p>
-                    ${registrations.length > 0 ? 
-                        `<p><strong>معرفات التسجيل المتاحة:</strong><br>${registrations.map(r => `• ${r.id} (${r.parent.name})`).join('<br>')}</p>` 
-                        : `<div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 8px; margin-top: 10px;">
-                            <p style="color: #856404;"><strong>⚠️ لا توجد تسجيلات في هذا الجهاز!</strong></p>
-                            <p style="color: #856404; font-size: 12px;">هذا يعني أن رمز QR تم إنشاؤه على جهاز آخر. كل جهاز يحتفظ ببياناته منفصلة.</p>
-                            <p style="color: #856404; font-size: 12px;"><strong>الحل:</strong> استخدم "استيراد البيانات المشتركة" من الجهاز الذي تم التسجيل عليه.</p>
-                           </div>`
-                    }
+                <div class="success">
+                    <h3>${successMsg}</h3>
+                    <p><strong>ولي الأمر:</strong> ${registrationData.parent.name}</p>
+                    <p><strong>عدد الأطفال:</strong> ${registrationData.children.length}</p>
+                    <p><strong>يوم الحضور:</strong> ${registrationData.dayName}</p>
+                    <p><strong>وقت الحضور:</strong> ${new Date().toLocaleString('ar-SA')}</p>
                 </div>
             `;
+            
+            updateStats();
+            
+            // Resume scanning after 4 seconds
+            resumeScanningAfterDelay(4000);
+            
+            // Clear result after 8 seconds total
+            setTimeout(() => {
+                resultDiv.innerHTML = '';
+            }, 8000);
         }
 
         // Export data for sharing between devices
@@ -1409,6 +1532,7 @@
                 return;
             }
             
+            // Use legacy function for manual input (requires local registration lookup)
             markAttendanceById(qrCode);
             document.getElementById('qrInput').value = '';
         }
@@ -1655,40 +1779,6 @@
             }, 3000);
         }
 
-        // Test jsQR directly without camera
-        function testJsQRDirectly() {
-            const testContainer = document.getElementById('testQRContainer');
-            
-            if (typeof jsQR === 'undefined') {
-                testContainer.innerHTML = '<div style="color: red; padding: 15px; background: white; border-radius: 8px;">❌ مكتبة jsQR غير محملة!</div>';
-                return;
-            }
-            
-            try {
-                // Create a simple test QR code data manually
-                // This is a minimal QR code pattern for testing
-                testContainer.innerHTML = `
-                    <div style="background: white; padding: 15px; border-radius: 8px; margin-top: 10px;">
-                        <h4 style="color: #9565D3;">اختبار مكتبة jsQR:</h4>
-                        <p style="color: green;">✅ مكتبة jsQR محملة ومتاحة</p>
-                        <p>النسخة: ${jsQR.toString ? 'متاحة' : 'غير معروفة'}</p>
-                        <p style="color: #666; font-size: 12px;">يمكنك الآن استخدام الماسح بأمان</p>
-                    </div>
-                `;
-                
-                console.log('jsQR function:', jsQR);
-                console.log('jsQR test successful');
-                
-            } catch (error) {
-                console.error('jsQR test failed:', error);
-                testContainer.innerHTML = `
-                    <div style="color: red; padding: 15px; background: white; border-radius: 8px;">
-                        ❌ خطأ في اختبار jsQR: ${error.message}
-                    </div>
-                `;
-            }
-        }
-
         // Check scanner status for debugging
         function checkScannerStatus() {
             const statusInfo = [];
@@ -1852,12 +1942,23 @@
             
             if (typeof QRious !== 'undefined') {
                 try {
+                    // Generate self-contained QR code (same format as the actual registration)
                     const qrData = {
+                        type: 'REGISTRATION',
                         id: testRegistration.id,
-                        parent: testRegistration.parent.name,
+                        parent: {
+                            name: testRegistration.parent.name,
+                            phone: testRegistration.parent.phone,
+                            nationality: testRegistration.parent.nationalityName
+                        },
+                        children: testRegistration.children.map(child => ({
+                            name: child.name,
+                            age: child.age,
+                            nationality: child.nationalityName
+                        })),
                         day: testRegistration.attendanceDay,
+                        dayName: testRegistration.dayInfo.name,
                         date: testRegistration.dayInfo.date,
-                        children: testRegistration.children.length,
                         timestamp: testRegistration.timestamp
                     };
                     
@@ -1874,17 +1975,17 @@
                     const info = document.createElement('div');
                     info.innerHTML = `
                         <div style="background: white; padding: 10px; border-radius: 8px; margin-top: 10px; text-align: right;">
-                            <h5 style="color: #9565D3;">رمز QR تجريبي:</h5>
+                            <h5 style="color: #9565D3;">رمز QR تجريبي (مكتفي ذاتياً):</h5>
                             <p><strong>معرف التسجيل:</strong> ${testRegistration.id}</p>
                             <p><strong>اسم ولي الأمر:</strong> ${testRegistration.parent.name}</p>
                             <p><strong>عدد الأطفال:</strong> ${testRegistration.children.length}</p>
-                            <p style="font-size: 12px; color: #666;">امسح هذا الرمز بالكاميرا لاختبار النظام</p>
+                            <p style="font-size: 12px; color: #28a745;">✅ هذا الرمز يعمل على أي جهاز دون الحاجة لاستيراد البيانات</p>
                         </div>
                     `;
                     testContainer.appendChild(info);
                     
-                    console.log('Test QR generated with data:', qrData);
-                    showMessage('تم إنشاء رمز QR تجريبي بنجاح', 'success');
+                    console.log('Self-contained test QR generated with data:', qrData);
+                    showMessage('تم إنشاء رمز QR تجريبي مكتفي ذاتياً', 'success');
                     
                 } catch (error) {
                     console.error('Test QR generation error:', error);
