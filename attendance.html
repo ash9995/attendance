@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام تسجيل الأنشطة - بيت الثقافة</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        // Initialize QR code library check
+        function initializeApp() {
+            console.log('QR Code library available:', typeof QRCode !== 'undefined');
+            updateCapacityDisplay();
+            updateStats();
+            displayAttendees();
+            checkAdminStatus();
+        }
+        
+        // Wait for libraries to load
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                setTimeout(initializeApp, 500); // Give libraries time to load
+            });
+        } else {
+            setTimeout(initializeApp, 500);
+        }
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background:#F0F0F0 ;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #9565D3;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .capacity-info {
+            background: #34E49B;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        
+        .form-container {
+            padding: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #9565D3;
+            font-weight: bold;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #F0F0F0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #9565D3;
+        }
+        
+        .children-section {
+            background: #F0F0F0;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .child-form {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .btn {
+            background: #9565D3 ;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: transform 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn-success {
+            background: #34E49B;
+        }
+        
+        .confirmation {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .qr-code {
+            margin: 20px 0;
+        }
+        
+        .admin-panel {
+            background: #F0F0F0;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        .attendees-list {
+            max-height: 400px;
+            overflow-y: auto;
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        
+        .attendee-item {
+            background: #F0F0F0;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #9565D3;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .error {
+            color: #ff4757;
+            background: #ffe3e6;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            color: #2ed573;
+            background: #e8f5e8;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .tab-buttons {
+            display: flex;
+            background: #F0F0F0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        
+        .tab-btn {
+            flex: 1;
+            padding: 15px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+        
+        .tab-btn.active {
+            background: #9565D3;
+            color: white;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: #9565D3 ;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                margin: 10px;
+            }
+            
+            .form-container {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>برنامج "صيف ورث" | المعهد الملكي للفنون التقليدية</h1>
+            <p>نشاط لمدة 3 أيام - بيت الثقافة</p>
+            <p style="font-size: 0.9em; margin-top: 10px;">التوقيت: من 4:00 مساءً إلى 8:00 مساءً</p>
+        </div>
+        
+        <div class="capacity-info">
+            <span id="capacityDisplay">المقاعد المتاحة: 90 من 90</span>
+        </div>
+        
+        <div class="tab-buttons">
+            <button class="tab-btn active" onclick="showTab('registration')">التسجيل</button>
+            <button id="scannerTab-btn" class="tab-btn hidden" onclick="showTab('scanner')">ماسح QR</button>
+            <button id="adminTab-btn" class="tab-btn hidden" onclick="showTab('admin')">لوحة الإدارة</button>
+            <button class="tab-btn" onclick="showAdminLogin()">تسجيل دخول الإدارة</button>
+        </div>
+        
+        <!-- Admin Login -->
+        <div id="adminLoginTab" class="form-container hidden">
+            <h2 style="color: #9565D3; margin-bottom: 20px;">تسجيل دخول الإدارة</h2>
+            <form id="adminLoginForm">
+                <div class="form-group">
+                    <label>اسم المستخدم</label>
+                    <input type="text" id="adminUsername" required>
+                </div>
+                <div class="form-group">
+                    <label>كلمة المرور</label>
+                    <input type="password" id="adminPassword" required>
+                </div>
+                <button type="submit" class="btn">تسجيل الدخول</button>
+            </form>
+            <div id="loginResult"></div>
+        </div>
+        <div id="registrationTab" class="form-container">
+            <form id="registrationForm">
+                <h2 style="color: #9565D3; margin-bottom: 20px;">بيانات ولي الأمر</h2>
+                
+                <div class="form-group">
+                    <label>الاسم الثلاثي</label>
+                    <input type="text" id="parentName" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>العمر</label>
+                    <input type="number" id="parentAge" min="18" max="100" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>رقم الجوال</label>
+                    <input type="tel" id="parentPhone" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>الجنسية</label>
+                    <select id="parentNationality" onchange="toggleParentIdField()" required>
+                        <option value="">اختر الجنسية</option>
+                        <option value="سعودي">سعودي</option>
+                        <option value="غير سعودي">غير سعودي</option>
+                    </select>
+                </div>
+                
+                <div id="parentNationalityField" class="form-group hidden">
+                    <label>الجنسية</label>
+                    <input type="text" id="parentNationalityName" placeholder="أدخل الجنسية">
+                </div>
+                
+                <div class="form-group">
+                    <label id="parentIdLabel">رقم الهوية</label>
+                    <input type="text" id="parentId" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>الجنس</label>
+                    <select id="parentGender" required>
+                        <option value="">اختر الجنس</option>
+                        <option value="ذكر">ذكر</option>
+                        <option value="أنثى">أنثى</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>اختر يوم الحضور</label>
+                    <select id="attendanceDay" required>
+                        <option value="">اختر اليوم</option>
+                        <option value="day1">اليوم الأول - 11 أغسطس 2025 (الأحد)</option>
+                        <option value="day2">اليوم الثاني - 12 أغسطس 2025 (الاثنين)</option>
+                        <option value="day3">اليوم الثالث - 13 أغسطس 2025 (الثلاثاء)</option>
+                    </select>
+                    <p style="color: #D97E5C; font-size: 0.9em; margin-top: 5px;">
+                        ⚠️ ملاحظة: بمجرد التسجيل في يوم معين، لا يمكن التسجيل في الأيام الأخرى
+                    </p>
+                </div>
+                
+                <div class="form-group">
+                    <label>عدد الأطفال المشاركين</label>
+                    <input type="number" id="childrenCount" min="1" max="5" onchange="generateChildrenForms()" required>
+                </div>
+                
+                <div id="childrenContainer" class="children-section" style="display: none;">
+                    <h3 style="color: #9565D3; margin-bottom: 15px;">بيانات الأطفال</h3>
+                    <div id="childrenForms"></div>
+                </div>
+                
+                <button type="submit" class="btn">تسجيل في النشاط</button>
+            </form>
+        </div>
+        
+        <!-- QR Scanner -->
+        <div id="scannerTab" class="form-container hidden">
+            <h2 style="color: #9565D3; margin-bottom: 20px;">ماسح QR للحضور</h2>
+            <div class="form-group">
+                <label>أدخل رمز التسجيل</label>
+                <input type="text" id="qrInput" placeholder="امسح الرمز أو أدخله يدوياً">
+                <button type="button" class="btn" onclick="markAttendance()">تسجيل الحضور</button>
+            </div>
+            <div id="scanResult"></div>
+        </div>
+        
+        <!-- Admin Panel -->
+        <div id="adminTab" class="form-container hidden">
+            <h2 style="color: #9565D3; margin-bottom: 20px;">لوحة الإدارة</h2>
+            
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalRegistrations">0</div>
+                    <div>إجمالي التسجيلات</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalAttendees">0</div>
+                    <div>إجمالي الحضور</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="availableSpots">90</div>
+                    <div>المقاعد المتاحة</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="attendanceRate">0%</div>
+                    <div>معدل الحضور</div>
+                </div>
+            </div>
+            
+            <div class="admin-panel">
+                <button class="btn btn-success" onclick="exportToExcel()">تصدير البيانات إلى Excel</button>
+                <button class="btn" onclick="clearAllData()" style="background: #ff4757; margin-right: 10px;">مسح جميع البيانات</button>
+                <button class="btn" onclick="adminLogout()" style="background: #9565D3; margin-right: 10px;">تسجيل الخروج</button>
+            </div>
+            
+            <div class="attendees-list">
+                <h3 style="color: #9565D3; margin-bottom: 15px;">قائمة المسجلين</h3>
+                <div id="attendeesList"></div>
+            </div>
+        </div>
+        
+        <!-- Confirmation Modal -->
+        <div id="confirmationModal" class="hidden">
+            <div class="confirmation">
+                <h2 style="color: #34E49B; margin-bottom: 20px;">تم التسجيل بنجاح!</h2>
+                <div id="confirmationDetails"></div>
+                <div class="qr-code">
+                    <canvas id="qrCanvas" width="200" height="200" style="border: 2px solid #9565D3; border-radius: 8px; background: white;"></canvas>
+                </div>
+                <p style="color: #9565D3; margin-top: 20px;">احتفظ بهذا الرمز لتسجيل الحضور في بيت الثقافة</p>
+                <button class="btn" onclick="closeConfirmation()">إغلاق</button>
+                <button class="btn btn-success" onclick="printConfirmation()" style="margin-right: 10px;">طباعة</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let registrations = JSON.parse(localStorage.getItem('registrations') || '[]');
+        let attendees = JSON.parse(localStorage.getItem('attendees') || '[]');
+        const maxCapacity = 90;
+        let isAdminLoggedIn = sessionStorage.getItem('adminLoggedIn') === 'true';
+        
+        // Day information
+        const dayInfo = {
+            'day1': { date: '2025-08-11', name: 'اليوم الأول - 11 أغسطس 2025 (الأحد)' },
+            'day2': { date: '2025-08-12', name: 'اليوم الثاني - 12 أغسطس 2025 (الاثنين)' },
+            'day3': { date: '2025-08-13', name: 'اليوم الثالث - 13 أغسطس 2025 (الثلاثاء)' }
+        };
+        
+        // Admin credentials
+        const adminCredentials = {
+            username: 'admin',
+            password: 'admin123'
+        };
+        
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            updateCapacityDisplay();
+            updateStats();
+            displayAttendees();
+            checkAdminStatus();
+        });
+        
+        // Check admin status
+        function checkAdminStatus() {
+            if (isAdminLoggedIn) {
+                showAdminElements();
+            } else {
+                hideAdminElements();
+            }
+        }
+        
+        // Show admin elements
+        function showAdminElements() {
+            document.getElementById('scannerTab-btn').classList.remove('hidden');
+            document.getElementById('adminTab-btn').classList.remove('hidden');
+            // Hide login button
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                if (btn.textContent.includes('تسجيل دخول الإدارة')) {
+                    btn.classList.add('hidden');
+                }
+            });
+        }
+        
+        // Hide admin elements
+        function hideAdminElements() {
+            document.getElementById('scannerTab-btn').classList.add('hidden');
+            document.getElementById('adminTab-btn').classList.add('hidden');
+            // Show login button
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                if (btn.textContent.includes('تسجيل دخول الإدارة')) {
+                    btn.classList.remove('hidden');
+                }
+            });
+        }
+        
+        // Show admin login
+        function showAdminLogin() {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('[id$="Tab"]').forEach(tab => tab.classList.add('hidden'));
+            
+            event.target.classList.add('active');
+            document.getElementById('adminLoginTab').classList.remove('hidden');
+        }
+        
+        // Handle admin login
+        document.getElementById('adminLoginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('adminUsername').value;
+            const password = document.getElementById('adminPassword').value;
+            const resultDiv = document.getElementById('loginResult');
+            
+            if (username === adminCredentials.username && password === adminCredentials.password) {
+                isAdminLoggedIn = true;
+                sessionStorage.setItem('adminLoggedIn', 'true');
+                showAdminElements();
+                showTab('admin');
+                resultDiv.innerHTML = '<div class="success">تم تسجيل الدخول بنجاح!</div>';
+                document.getElementById('adminLoginForm').reset();
+                
+                // Auto-hide success message
+                setTimeout(() => {
+                    resultDiv.innerHTML = '';
+                }, 2000);
+            } else {
+                resultDiv.innerHTML = '<div class="error">اسم المستخدم أو كلمة المرور غير صحيحة</div>';
+            }
+        });
+        
+        // Admin logout
+        function adminLogout() {
+            if (confirm('هل أنت متأكد من تسجيل الخروج؟')) {
+                isAdminLoggedIn = false;
+                sessionStorage.removeItem('adminLoggedIn');
+                hideAdminElements();
+                showTab('registration');
+                showMessage('تم تسجيل الخروج بنجاح', 'success');
+            }
+        }
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('[id$="Tab"]').forEach(tab => tab.classList.add('hidden'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName + 'Tab').classList.remove('hidden');
+            
+            if (tabName === 'admin') {
+                updateStats();
+                displayAttendees();
+            }
+        }
+        
+        // Toggle parent ID field based on nationality
+        function toggleParentIdField() {
+            const nationality = document.getElementById('parentNationality').value;
+            const nationalityField = document.getElementById('parentNationalityField');
+            const idLabel = document.getElementById('parentIdLabel');
+            
+            if (nationality === 'سعودي') {
+                nationalityField.classList.add('hidden');
+                idLabel.textContent = 'رقم الهوية';
+            } else if (nationality === 'غير سعودي') {
+                nationalityField.classList.remove('hidden');
+                idLabel.textContent = 'رقم الإقامة';
+            }
+        }
+        
+        // Toggle child ID field based on nationality
+        function toggleChildIdField(childIndex) {
+            const nationality = document.getElementById(`childNationality${childIndex}`).value;
+            const nationalityField = document.getElementById(`childNationalityField${childIndex}`);
+            const idLabel = document.getElementById(`childIdLabel${childIndex}`);
+            
+            if (nationality === 'سعودي') {
+                nationalityField.classList.add('hidden');
+                idLabel.textContent = 'رقم الهوية';
+            } else if (nationality === 'غير سعودي') {
+                nationalityField.classList.remove('hidden');
+                idLabel.textContent = 'رقم الإقامة';
+            }
+        }
+        function generateChildrenForms() {
+            const count = parseInt(document.getElementById('childrenCount').value);
+            const container = document.getElementById('childrenForms');
+            const childrenContainer = document.getElementById('childrenContainer');
+            
+            if (count > 0) {
+                childrenContainer.style.display = 'block';
+                container.innerHTML = '';
+                
+                for (let i = 1; i <= count; i++) {
+                    const childForm = document.createElement('div');
+                    childForm.className = 'child-form';
+                    childForm.innerHTML = `
+                        <h4 style="color: #D97E5C; margin-bottom: 15px;">الطفل ${i}</h4>
+                        <div class="form-group">
+                            <label>الاسم الثلاثي</label>
+                            <input type="text" id="childName${i}" required>
+                        </div>
+                        <div class="form-group">
+                            <label>العمر</label>
+                            <input type="number" id="childAge${i}" min="8" max="12" required>
+                        </div>
+                        <div class="form-group">
+                            <label>الجنسية</label>
+                            <select id="childNationality${i}" onchange="toggleChildIdField(${i})" required>
+                                <option value="">اختر الجنسية</option>
+                                <option value="سعودي">سعودي</option>
+                                <option value="غير سعودي">غير سعودي</option>
+                            </select>
+                        </div>
+                        <div id="childNationalityField${i}" class="form-group hidden">
+                            <label>الجنسية</label>
+                            <input type="text" id="childNationalityName${i}" placeholder="أدخل الجنسية">
+                        </div>
+                        <div class="form-group">
+                            <label id="childIdLabel${i}">رقم الهوية</label>
+                            <input type="text" id="childId${i}" required>
+                        </div>
+                        <div class="form-group">
+                            <label>الجنس</label>
+                            <select id="childGender${i}" required>
+                                <option value="">اختر الجنس</option>
+                                <option value="ذكر">ذكر</option>
+                                <option value="أنثى">أنثى</option>
+                            </select>
+                        </div>
+                    `;
+                    container.appendChild(childForm);
+                }
+            } else {
+                childrenContainer.style.display = 'none';
+            }
+        }
+        
+        // Handle form submission
+        document.getElementById('registrationForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const childrenCount = parseInt(document.getElementById('childrenCount').value);
+            const attendanceDay = document.getElementById('attendanceDay').value;
+            
+            if (!attendanceDay) {
+                showMessage('يرجى اختيار يوم الحضور', 'error');
+                return;
+            }
+            
+            // Check capacity for the specific day
+            const dayRegistrations = registrations.filter(reg => reg.attendanceDay === attendanceDay);
+            const dayCapacity = dayRegistrations.reduce((total, reg) => total + reg.children.length, 0);
+            
+            if (dayCapacity + childrenCount > maxCapacity) {
+                showMessage(`عذراً، لا توجد مقاعد كافية متاحة في ${dayInfo[attendanceDay].name}!`, 'error');
+                return;
+            }
+            
+            // Check for duplicate registrations
+            const parentId = document.getElementById('parentId').value.trim();
+            const parentNationality = document.getElementById('parentNationality').value;
+            const parentNationalityName = document.getElementById('parentNationalityName').value;
+            const childIds = [];
+            
+            // Validate nationality fields
+            if (parentNationality === 'غير سعودي' && !parentNationalityName.trim()) {
+                showMessage('يرجى إدخال جنسية ولي الأمر', 'error');
+                return;
+            }
+            
+            for (let i = 1; i <= childrenCount; i++) {
+                const childId = document.getElementById(`childId${i}`).value.trim();
+                const childNationality = document.getElementById(`childNationality${i}`).value;
+                const childNationalityName = document.getElementById(`childNationalityName${i}`).value;
+                
+                // Validate child nationality
+                if (childNationality === 'غير سعودي' && !childNationalityName.trim()) {
+                    showMessage(`يرجى إدخال جنسية الطفل ${i}`, 'error');
+                    return;
+                }
+                
+                if (childIds.includes(childId)) {
+                    showMessage('رقم هوية/إقامة الطفل مكرر!', 'error');
+                    return;
+                }
+                childIds.push(childId);
+            }
+            
+            // Check if parent or children already registered for ANY day
+            for (const reg of registrations) {
+                if (reg.parent.id === parentId && reg.parent.nationality === parentNationality) {
+                    showMessage(`ولي الأمر مسجل مسبقاً في ${dayInfo[reg.attendanceDay].name}! لا يمكن التسجيل في أيام أخرى.`, 'error');
+                    return;
+                }
+                for (const child of reg.children) {
+                    if (childIds.includes(child.id)) {
+                        showMessage(`أحد الأطفال مسجل مسبقاً في ${dayInfo[reg.attendanceDay].name}! لا يمكن التسجيل في أيام أخرى.`, 'error');
+                        return;
+                    }
+                }
+            }
+            
+            // Create registration object
+            const registration = {
+                id: Date.now().toString(),
+                timestamp: new Date().toISOString(),
+                attendanceDay: attendanceDay,
+                dayInfo: dayInfo[attendanceDay],
+                parent: {
+                    name: document.getElementById('parentName').value,
+                    age: document.getElementById('parentAge').value,
+                    phone: document.getElementById('parentPhone').value,
+                    id: parentId,
+                    gender: document.getElementById('parentGender').value,
+                    nationality: parentNationality,
+                    nationalityName: parentNationality === 'غير سعودي' ? parentNationalityName : 'سعودي'
+                },
+                children: []
+            };
+            
+            // Add children data
+            for (let i = 1; i <= childrenCount; i++) {
+                const childNationality = document.getElementById(`childNationality${i}`).value;
+                const childNationalityName = document.getElementById(`childNationalityName${i}`).value;
+                
+                registration.children.push({
+                    name: document.getElementById(`childName${i}`).value,
+                    age: document.getElementById(`childAge${i}`).value,
+                    id: document.getElementById(`childId${i}`).value,
+                    gender: document.getElementById(`childGender${i}`).value,
+                    nationality: childNationality,
+                    nationalityName: childNationality === 'غير سعودي' ? childNationalityName : 'سعودي'
+                });
+            }
+            
+            // Save registration
+            registrations.push(registration);
+            localStorage.setItem('registrations', JSON.stringify(registrations));
+            
+            // Show confirmation with delay to ensure DOM is ready
+            setTimeout(() => {
+                showConfirmation(registration);
+            }, 200);
+            
+            // Reset form
+            document.getElementById('registrationForm').reset();
+            document.getElementById('childrenContainer').style.display = 'none';
+            
+            updateCapacityDisplay();
+            showMessage('تم التسجيل بنجاح!', 'success');
+        });
+        
+        // Show confirmation with QR code
+        async function showConfirmation(registration) {
+            const modal = document.getElementById('confirmationModal');
+            const details = document.getElementById('confirmationDetails');
+            
+            let childrenDetails = '';
+            registration.children.forEach((child, index) => {
+                childrenDetails += `
+                    <p><strong>الطفل ${index + 1}:</strong> ${child.name} (${child.age} سنة) - ${child.nationalityName}</p>
+                `;
+            });
+            
+            details.innerHTML = `
+                <div style="text-align: right; margin-bottom: 20px;">
+                    <h3 style="color: #9565D3;">تفاصيل التسجيل</h3>
+                    <p><strong>رقم التسجيل:</strong> ${registration.id}</p>
+                    <p><strong>يوم الحضور:</strong> ${registration.dayInfo.name}</p>
+                    <p><strong>الوقت:</strong> من 4:00 مساءً إلى 8:00 مساءً</p>
+                    <p><strong>ولي الأمر:</strong> ${registration.parent.name}</p>
+                    <p><strong>عدد الأطفال:</strong> ${registration.children.length}</p>
+                </div>
+            `;
+            
+            // Generate QR code using the library
+            const canvas = document.getElementById('qrCanvas');
+            if (canvas && typeof QRCode !== 'undefined') {
+                try {
+                    // Clear canvas
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    // Set canvas size
+                    canvas.width = 200;
+                    canvas.height = 200;
+                    
+                    // Generate QR code with registration data
+                    const qrData = {
+                        id: registration.id,
+                        day: registration.attendanceDay,
+                        date: registration.dayInfo.date,
+                        children: registration.children.length
+                    };
+                    
+                    QRCode.toCanvas(canvas, JSON.stringify(qrData), {
+                        width: 200,
+                        height: 200,
+                        margin: 2,
+                        color: {
+                            dark: '#9565D3',
+                            light: '#FFFFFF'
+                        }
+                    }, function (error) {
+                        if (error) {
+                            console.error('QR generation failed:', error);
+                            // Fallback: try with just the ID
+                            QRCode.toCanvas(canvas, registration.id, {
+                                width: 200,
+                                color: { dark: '#9565D3', light: '#FFFFFF' }
+                            });
+                        } else {
+                            console.log('QR Code generated successfully!');
+                        }
+                    });
+                    
+                } catch (error) {
+                    console.error('QR generation error:', error);
+                }
+            }
+            
+            // Show modal
+            modal.classList.remove('hidden');
+            modal.style.position = 'fixed';
+            modal.style.top = '50%';
+            modal.style.left = '50%';
+            modal.style.transform = 'translate(-50%, -50%)';
+            modal.style.zIndex = '1000';
+            modal.style.background = 'rgba(0,0,0,0.8)';
+            modal.style.width = '100%';
+            modal.style.height = '100%';
+            modal.style.display = 'flex';
+            modal.style.alignItems = 'center';
+            modal.style.justifyContent = 'center';
+        }
+        
+        // Fallback QR generation method
+        function generateFallbackQR(canvas, data) {
+            try {
+                QRCode.toCanvas(canvas, data, {
+                    width: 200,
+                    margin: 1
+                });
+                console.log('Fallback QR code generated');
+            } catch (e) {
+                console.error('Fallback QR generation also failed:', e);
+                // Last resort - reload and try again
+                setTimeout(() => {
+                    QRCode.toCanvas(canvas, data, { width: 200 });
+                }, 500);
+            }
+        }
+        
+        // Close confirmation modal
+        function closeConfirmation() {
+            document.getElementById('confirmationModal').classList.add('hidden');
+            document.getElementById('confirmationModal').style.display = 'none';
+        }
+        
+        // Print confirmation
+        function printConfirmation() {
+            window.print();
+        }
+        
+        // Mark attendance
+        function markAttendance() {
+            const qrCode = document.getElementById('qrInput').value.trim();
+            const resultDiv = document.getElementById('scanResult');
+            
+            if (!qrCode) {
+                resultDiv.innerHTML = '<div class="error">يرجى إدخال رمز التسجيل</div>';
+                return;
+            }
+            
+            const registration = registrations.find(reg => reg.id === qrCode);
+            
+            if (!registration) {
+                resultDiv.innerHTML = '<div class="error">رمز التسجيل غير صحيح</div>';
+                return;
+            }
+            
+            if (attendees.some(att => att.registrationId === qrCode)) {
+                resultDiv.innerHTML = '<div class="error">تم تسجيل الحضور مسبقاً</div>';
+                return;
+            }
+            
+            // Add to attendees
+            const attendance = {
+                registrationId: qrCode,
+                timestamp: new Date().toISOString(),
+                parent: registration.parent,
+                children: registration.children
+            };
+            
+            attendees.push(attendance);
+            localStorage.setItem('attendees', JSON.stringify(attendees));
+            
+            resultDiv.innerHTML = `
+                <div class="success">
+                    <h3>تم تسجيل الحضور بنجاح!</h3>
+                    <p><strong>ولي الأمر:</strong> ${registration.parent.name}</p>
+                    <p><strong>عدد الأطفال:</strong> ${registration.children.length}</p>
+                    <p><strong>وقت الحضور:</strong> ${new Date().toLocaleString('ar-SA')}</p>
+                </div>
+            `;
+            
+            document.getElementById('qrInput').value = '';
+            updateStats();
+        }
+        
+        // Update capacity display
+        function updateCapacityDisplay() {
+            const totalRegistered = registrations.reduce((total, reg) => total + reg.children.length, 0);
+            const available = maxCapacity - totalRegistered;
+            document.getElementById('capacityDisplay').textContent = `المقاعد المتاحة: ${available} من ${maxCapacity}`;
+        }
+        
+        // Update statistics
+        function updateStats() {
+            const totalRegistrations = registrations.length;
+            const totalAttendees = attendees.length;
+            const registeredChildren = registrations.reduce((total, reg) => total + reg.children.length, 0);
+            const availableSpots = maxCapacity - registeredChildren;
+            const attendanceRate = totalRegistrations > 0 ? Math.round((totalAttendees / totalRegistrations) * 100) : 0;
+            
+            document.getElementById('totalRegistrations').textContent = totalRegistrations;
+            document.getElementById('totalAttendees').textContent = totalAttendees;
+            document.getElementById('availableSpots').textContent = availableSpots;
+            document.getElementById('attendanceRate').textContent = attendanceRate + '%';
+        }
+        
+        // Display attendees list
+        function displayAttendees() {
+            const container = document.getElementById('attendeesList');
+            if (!container) {
+                console.error('Attendees list container not found');
+                return;
+            }
+            
+            container.innerHTML = '';
+            
+            if (registrations.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #9565D3;">لا توجد تسجيلات حتى الآن</p>';
+                return;
+            }
+            
+            registrations.forEach(reg => {
+                const isAttended = attendees.some(att => att.registrationId === reg.id);
+                const attendanceInfo = attendees.find(att => att.registrationId === reg.id);
+                
+                const item = document.createElement('div');
+                item.className = 'attendee-item';
+                item.style.borderLeftColor = isAttended ? '#34E49B' : '#D97E5C';
+                
+                let childrenList = '';
+                reg.children.forEach(child => {
+                    childrenList += `<li>${child.name} (${child.age} سنة) - ${child.nationalityName} - ${child.id}</li>`;
+                });
+                
+                item.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <h4 style="color: #9565D3;">${reg.parent.name}</h4>
+                            <p><strong>رقم التسجيل:</strong> ${reg.id}</p>
+                            <p><strong>يوم الحضور:</strong> ${reg.dayInfo ? reg.dayInfo.name : 'غير محدد'}</p>
+                            <p><strong>الجنسية:</strong> ${reg.parent.nationalityName}</p>
+                            <p><strong>الجوال:</strong> ${reg.parent.phone}</p>
+                            <p><strong>الأطفال:</strong></p>
+                            <ul style="margin-right: 20px;">${childrenList}</ul>
+                           
+                            ${isAttended ? `<p style="color: #34E49B;"><strong>وقت الحضور:</strong> ${new Date(attendanceInfo.timestamp).toLocaleString('ar-SA')}</p>` : ''}
+                        </div>
+                        <div style="text-align: center;">
+                            <span style="background: ${isAttended ? '#34E49B' : '#D97E5C'}; color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px;">
+                                ${isAttended ? 'حضر' : 'لم يحضر'}
+                            </span>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(item);
+            });
+            
+            console.log('Attendees list updated with', registrations.length, 'registrations');
+        }
+        
+        // Export to Excel
+        function exportToExcel() {
+            console.log('Starting Excel export...');
+            
+            if (!registrations || registrations.length === 0) {
+                showMessage('لا توجد بيانات للتصدير', 'error');
+                return;
+            }
+            
+            try {
+                const data = [];
+                
+                registrations.forEach(reg => {
+                    const attendanceInfo = attendees.find(att => att.registrationId === reg.id);
+                    const isAttended = !!attendanceInfo;
+                    
+                    reg.children.forEach((child, index) => {
+                        data.push({
+                            'رقم التسجيل': reg.id,
+                            'يوم الحضور': reg.dayInfo ? reg.dayInfo.name : 'غير محدد',
+                            'تاريخ الحضور': reg.dayInfo ? reg.dayInfo.date : '',
+                            'اسم ولي الأمر': reg.parent.name,
+                            'عمر ولي الأمر': reg.parent.age,
+                            'جوال ولي الأمر': reg.parent.phone,
+                            'هوية/إقامة ولي الأمر': reg.parent.id,
+                            'جنس ولي الأمر': reg.parent.gender,
+                            'جنسية ولي الأمر': reg.parent.nationalityName || 'غير محدد',
+                            'اسم الطفل': child.name,
+                            'عمر الطفل': child.age,
+                            'هوية/إقامة الطفل': child.id,
+                            'جنس الطفل': child.gender,
+                            'جنسية الطفل': child.nationalityName || 'غير محدد',
+                            'حالة الحضور': isAttended ? 'حضر' : 'لم يحضر',
+                            'وقت الحضور': isAttended ? new Date(attendanceInfo.timestamp).toLocaleString('ar-SA') : ''
+                        });
+                    });
+                });
+                
+                console.log('Data prepared for export:', data.length, 'rows');
+                
+                // Check if XLSX is available
+                if (typeof XLSX === 'undefined') {
+                    showMessage('مكتبة Excel غير متاحة', 'error');
+                    return;
+                }
+                
+                const ws = XLSX.utils.json_to_sheet(data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "بيانات المسجلين");
+                
+                const fileName = `تقرير_النشاط_الثقافي_${new Date().toISOString().split('T')[0]}.xlsx`;
+                XLSX.writeFile(wb, fileName);
+                
+                showMessage('تم تصدير البيانات بنجاح', 'success');
+                console.log('Excel file exported successfully');
+                
+            } catch (error) {
+                console.error('Export failed:', error);
+                showMessage('فشل في تصدير البيانات: ' + error.message, 'error');
+            }
+        }
+        
+        // Clear all data
+        function clearAllData() {
+            if (confirm('هل أنت متأكد من حذف جميع البيانات؟ لا يمكن التراجع عن هذا الإجراء.')) {
+                localStorage.removeItem('registrations');
+                localStorage.removeItem('attendees');
+                registrations = [];
+                attendees = [];
+                updateCapacityDisplay();
+                updateStats();
+                displayAttendees();
+                showMessage('تم حذف جميع البيانات بنجاح', 'success');
+            }
+        }
+        
+        // Show message
+        function showMessage(message, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = type;
+            messageDiv.textContent = message;
+            messageDiv.style.position = 'fixed';
+            messageDiv.style.top = '20px';
+            messageDiv.style.right = '20px';
+            messageDiv.style.zIndex = '1001';
+            messageDiv.style.maxWidth = '300px';
+            
+            document.body.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                document.body.removeChild(messageDiv);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
