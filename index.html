@@ -4,27 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام تسجيل الأنشطة - بيت الثقافة</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script>
-        // Initialize QR code library check
-        function initializeApp() {
-            console.log('QR Code library available:', typeof QRCode !== 'undefined');
-            updateCapacityDisplay();
-            updateStats();
-            displayAttendees();
-            checkAdminStatus();
-        }
-        
-        // Wait for libraries to load
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', function() {
-                setTimeout(initializeApp, 500); // Give libraries time to load
-            });
-        } else {
-            setTimeout(initializeApp, 500);
-        }
-    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -141,6 +123,8 @@
         
         .qr-code {
             margin: 20px 0;
+            display: flex;
+            justify-content: center;
         }
         
         .admin-panel {
@@ -228,6 +212,46 @@
             font-size: 2em;
             font-weight: bold;
         }
+
+        /* QR Scanner styles */
+        .qr-scanner-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .camera-container {
+            position: relative;
+            max-width: 400px;
+            width: 100%;
+        }
+
+        #cameraVideo {
+            width: 100%;
+            height: 300px;
+            border-radius: 10px;
+            border: 3px solid #9565D3;
+        }
+
+        .scanner-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 150px;
+            height: 150px;
+            border: 3px solid #34E49B;
+            border-radius: 10px;
+            box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.3);
+        }
+
+        .scanner-controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
         
         @media (max-width: 600px) {
             .container {
@@ -240,6 +264,11 @@
             
             .header h1 {
                 font-size: 2em;
+            }
+
+            .scanner-controls {
+                flex-direction: column;
+                align-items: center;
             }
         }
     </style>
@@ -279,6 +308,8 @@
             </form>
             <div id="loginResult"></div>
         </div>
+
+        <!-- Registration Tab -->
         <div id="registrationTab" class="form-container">
             <form id="registrationForm">
                 <h2 style="color: #9565D3; margin-bottom: 20px;">بيانات ولي الأمر</h2>
@@ -356,11 +387,27 @@
         <!-- QR Scanner -->
         <div id="scannerTab" class="form-container hidden">
             <h2 style="color: #9565D3; margin-bottom: 20px;">ماسح QR للحضور</h2>
-            <div class="form-group">
-                <label>أدخل رمز التسجيل</label>
-                <input type="text" id="qrInput" placeholder="امسح الرمز أو أدخله يدوياً">
-                <button type="button" class="btn" onclick="markAttendance()">تسجيل الحضور</button>
+            
+            <div class="qr-scanner-container">
+                <!-- Camera Scanner -->
+                <div class="camera-container">
+                    <video id="cameraVideo" class="hidden" autoplay playsinline></video>
+                    <div class="scanner-overlay hidden" id="scannerOverlay"></div>
+                </div>
+                
+                <div class="scanner-controls">
+                    <button type="button" class="btn" onclick="startCamera()">تشغيل الكاميرا</button>
+                    <button type="button" class="btn" onclick="stopCamera()">إيقاف الكاميرا</button>
+                </div>
+                
+                <!-- Manual Input -->
+                <div class="form-group" style="width: 100%; max-width: 400px;">
+                    <label>أو أدخل رمز التسجيل يدوياً</label>
+                    <input type="text" id="qrInput" placeholder="امسح الرمز أو أدخله يدوياً">
+                    <button type="button" class="btn" onclick="markAttendance()" style="margin-top: 10px;">تسجيل الحضور</button>
+                </div>
             </div>
+            
             <div id="scanResult"></div>
         </div>
         
@@ -420,6 +467,8 @@
         let attendees = JSON.parse(localStorage.getItem('attendees') || '[]');
         const maxCapacity = 90;
         let isAdminLoggedIn = sessionStorage.getItem('adminLoggedIn') === 'true';
+        let cameraStream = null;
+        let isScanning = false;
         
         // Day information
         const dayInfo = {
@@ -455,7 +504,6 @@
         function showAdminElements() {
             document.getElementById('scannerTab-btn').classList.remove('hidden');
             document.getElementById('adminTab-btn').classList.remove('hidden');
-            // Hide login button
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 if (btn.textContent.includes('تسجيل دخول الإدارة')) {
                     btn.classList.add('hidden');
@@ -467,7 +515,6 @@
         function hideAdminElements() {
             document.getElementById('scannerTab-btn').classList.add('hidden');
             document.getElementById('adminTab-btn').classList.add('hidden');
-            // Show login button
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 if (btn.textContent.includes('تسجيل دخول الإدارة')) {
                     btn.classList.remove('hidden');
@@ -500,7 +547,6 @@
                 resultDiv.innerHTML = '<div class="success">تم تسجيل الدخول بنجاح!</div>';
                 document.getElementById('adminLoginForm').reset();
                 
-                // Auto-hide success message
                 setTimeout(() => {
                     resultDiv.innerHTML = '';
                 }, 2000);
@@ -519,11 +565,27 @@
                 showMessage('تم تسجيل الخروج بنجاح', 'success');
             }
         }
+
+        // Show tab function
         function showTab(tabName) {
+            // Stop camera if switching away from scanner
+            if (tabName !== 'scanner' && cameraStream) {
+                stopCamera();
+            }
+
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('[id$="Tab"]').forEach(tab => tab.classList.add('hidden'));
             
-            event.target.classList.add('active');
+            // Find and activate the correct tab button
+            const tabButtons = document.querySelectorAll('.tab-btn');
+            tabButtons.forEach(btn => {
+                if ((tabName === 'registration' && btn.textContent.includes('التسجيل')) ||
+                    (tabName === 'scanner' && btn.textContent.includes('ماسح QR')) ||
+                    (tabName === 'admin' && btn.textContent.includes('لوحة الإدارة'))) {
+                    btn.classList.add('active');
+                }
+            });
+            
             document.getElementById(tabName + 'Tab').classList.remove('hidden');
             
             if (tabName === 'admin') {
@@ -561,6 +623,8 @@
                 idLabel.textContent = 'رقم الإقامة';
             }
         }
+
+        // Generate children forms
         function generateChildrenForms() {
             const count = parseInt(document.getElementById('childrenCount').value);
             const container = document.getElementById('childrenForms');
@@ -717,10 +781,8 @@
             registrations.push(registration);
             localStorage.setItem('registrations', JSON.stringify(registrations));
             
-            // Show confirmation with delay to ensure DOM is ready
-            setTimeout(() => {
-                showConfirmation(registration);
-            }, 200);
+            // Show confirmation
+            showConfirmation(registration);
             
             // Reset form
             document.getElementById('registrationForm').reset();
@@ -731,7 +793,7 @@
         });
         
         // Show confirmation with QR code
-        async function showConfirmation(registration) {
+        function showConfirmation(registration) {
             const modal = document.getElementById('confirmationModal');
             const details = document.getElementById('confirmationDetails');
             
@@ -750,52 +812,44 @@
                     <p><strong>الوقت:</strong> من 4:00 مساءً إلى 8:00 مساءً</p>
                     <p><strong>ولي الأمر:</strong> ${registration.parent.name}</p>
                     <p><strong>عدد الأطفال:</strong> ${registration.children.length}</p>
+                    ${childrenDetails}
                 </div>
             `;
             
-            // Generate QR code using the library
+            // Generate QR code
             const canvas = document.getElementById('qrCanvas');
-            if (canvas && typeof QRCode !== 'undefined') {
+            if (canvas && typeof QRious !== 'undefined') {
                 try {
-                    // Clear canvas
-                    const ctx = canvas.getContext('2d');
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    
-                    // Set canvas size
-                    canvas.width = 200;
-                    canvas.height = 200;
-                    
-                    // Generate QR code with registration data
                     const qrData = {
                         id: registration.id,
+                        parent: registration.parent.name,
                         day: registration.attendanceDay,
                         date: registration.dayInfo.date,
-                        children: registration.children.length
+                        children: registration.children.length,
+                        timestamp: registration.timestamp
                     };
                     
-                    QRCode.toCanvas(canvas, JSON.stringify(qrData), {
-                        width: 200,
-                        height: 200,
-                        margin: 2,
-                        color: {
-                            dark: '#9565D3',
-                            light: '#FFFFFF'
-                        }
-                    }, function (error) {
-                        if (error) {
-                            console.error('QR generation failed:', error);
-                            // Fallback: try with just the ID
-                            QRCode.toCanvas(canvas, registration.id, {
-                                width: 200,
-                                color: { dark: '#9565D3', light: '#FFFFFF' }
-                            });
-                        } else {
-                            console.log('QR Code generated successfully!');
-                        }
+                    const qr = new QRious({
+                        element: canvas,
+                        value: JSON.stringify(qrData),
+                        size: 200,
+                        background: 'white',
+                        foreground: '#9565D3',
+                        level: 'M'
                     });
+                    
+                    console.log('QR Code generated successfully!', qrData);
                     
                 } catch (error) {
                     console.error('QR generation error:', error);
+                    // Fallback to simple ID
+                    const qr = new QRious({
+                        element: canvas,
+                        value: registration.id,
+                        size: 200,
+                        background: 'white',
+                        foreground: '#9565D3'
+                    });
                 }
             }
             
@@ -814,23 +868,6 @@
             modal.style.justifyContent = 'center';
         }
         
-        // Fallback QR generation method
-        function generateFallbackQR(canvas, data) {
-            try {
-                QRCode.toCanvas(canvas, data, {
-                    width: 200,
-                    margin: 1
-                });
-                console.log('Fallback QR code generated');
-            } catch (e) {
-                console.error('Fallback QR generation also failed:', e);
-                // Last resort - reload and try again
-                setTimeout(() => {
-                    QRCode.toCanvas(canvas, data, { width: 200 });
-                }, 500);
-            }
-        }
-        
         // Close confirmation modal
         function closeConfirmation() {
             document.getElementById('confirmationModal').classList.add('hidden');
@@ -840,6 +877,109 @@
         // Print confirmation
         function printConfirmation() {
             window.print();
+        }
+
+        // Camera QR Scanner Functions
+        async function startCamera() {
+            try {
+                const video = document.getElementById('cameraVideo');
+                const overlay = document.getElementById('scannerOverlay');
+                
+                // Request camera access
+                cameraStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    } 
+                });
+                
+                video.srcObject = cameraStream;
+                video.classList.remove('hidden');
+                overlay.classList.remove('hidden');
+                
+                isScanning = true;
+                
+                // Start scanning loop
+                scanQRCode();
+                
+                showMessage('تم تشغيل الكاميرا. وجه الكاميرا نحو رمز QR', 'success');
+                
+            } catch (error) {
+                console.error('Camera access error:', error);
+                showMessage('خطأ في الوصول للكاميرا. تأكد من منح الإذن للكاميرا.', 'error');
+            }
+        }
+
+        function stopCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+            
+            const video = document.getElementById('cameraVideo');
+            const overlay = document.getElementById('scannerOverlay');
+            
+            video.classList.add('hidden');
+            overlay.classList.add('hidden');
+            video.srcObject = null;
+            
+            isScanning = false;
+            
+            showMessage('تم إيقاف الكاميرا', 'success');
+        }
+
+        function scanQRCode() {
+            if (!isScanning) return;
+            
+            const video = document.getElementById('cameraVideo');
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth;
+                
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                
+                if (typeof jsQR !== 'undefined') {
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: "dontInvert",
+                    });
+                    
+                    if (code) {
+                        console.log('QR Code detected:', code.data);
+                        
+                        // Process the QR code
+                        processScannedQR(code.data);
+                        
+                        // Stop scanning after successful scan
+                        stopCamera();
+                        return;
+                    }
+                }
+            }
+            
+            // Continue scanning
+            requestAnimationFrame(scanQRCode);
+        }
+
+        function processScannedQR(qrData) {
+            try {
+                // Try to parse as JSON first (new format)
+                const data = JSON.parse(qrData);
+                if (data.id) {
+                    document.getElementById('qrInput').value = data.id;
+                    markAttendance();
+                    return;
+                }
+            } catch (e) {
+                // If not JSON, treat as simple ID (old format)
+                document.getElementById('qrInput').value = qrData;
+                markAttendance();
+            }
         }
         
         // Mark attendance
@@ -869,7 +1009,8 @@
                 registrationId: qrCode,
                 timestamp: new Date().toISOString(),
                 parent: registration.parent,
-                children: registration.children
+                children: registration.children,
+                dayInfo: registration.dayInfo
             };
             
             attendees.push(attendance);
@@ -877,15 +1018,21 @@
             
             resultDiv.innerHTML = `
                 <div class="success">
-                    <h3>تم تسجيل الحضور بنجاح!</h3>
+                    <h3>✅ تم تسجيل الحضور بنجاح!</h3>
                     <p><strong>ولي الأمر:</strong> ${registration.parent.name}</p>
                     <p><strong>عدد الأطفال:</strong> ${registration.children.length}</p>
+                    <p><strong>يوم الحضور:</strong> ${registration.dayInfo.name}</p>
                     <p><strong>وقت الحضور:</strong> ${new Date().toLocaleString('ar-SA')}</p>
                 </div>
             `;
             
             document.getElementById('qrInput').value = '';
             updateStats();
+            
+            // Auto clear result after 5 seconds
+            setTimeout(() => {
+                resultDiv.innerHTML = '';
+            }, 5000);
         }
         
         // Update capacity display
@@ -912,10 +1059,7 @@
         // Display attendees list
         function displayAttendees() {
             const container = document.getElementById('attendeesList');
-            if (!container) {
-                console.error('Attendees list container not found');
-                return;
-            }
+            if (!container) return;
             
             container.innerHTML = '';
             
@@ -947,7 +1091,6 @@
                             <p><strong>الجوال:</strong> ${reg.parent.phone}</p>
                             <p><strong>الأطفال:</strong></p>
                             <ul style="margin-right: 20px;">${childrenList}</ul>
-                           
                             ${isAttended ? `<p style="color: #34E49B;"><strong>وقت الحضور:</strong> ${new Date(attendanceInfo.timestamp).toLocaleString('ar-SA')}</p>` : ''}
                         </div>
                         <div style="text-align: center;">
@@ -960,14 +1103,10 @@
                 
                 container.appendChild(item);
             });
-            
-            console.log('Attendees list updated with', registrations.length, 'registrations');
         }
         
         // Export to Excel
         function exportToExcel() {
-            console.log('Starting Excel export...');
-            
             if (!registrations || registrations.length === 0) {
                 showMessage('لا توجد بيانات للتصدير', 'error');
                 return;
@@ -1002,9 +1141,6 @@
                     });
                 });
                 
-                console.log('Data prepared for export:', data.length, 'rows');
-                
-                // Check if XLSX is available
                 if (typeof XLSX === 'undefined') {
                     showMessage('مكتبة Excel غير متاحة', 'error');
                     return;
@@ -1018,7 +1154,6 @@
                 XLSX.writeFile(wb, fileName);
                 
                 showMessage('تم تصدير البيانات بنجاح', 'success');
-                console.log('Excel file exported successfully');
                 
             } catch (error) {
                 console.error('Export failed:', error);
@@ -1054,9 +1189,25 @@
             document.body.appendChild(messageDiv);
             
             setTimeout(() => {
-                document.body.removeChild(messageDiv);
+                if (document.body.contains(messageDiv)) {
+                    document.body.removeChild(messageDiv);
+                }
             }, 3000);
         }
+
+        // Handle page visibility change to stop camera when page is hidden
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden && cameraStream) {
+                stopCamera();
+            }
+        });
+
+        // Handle beforeunload to stop camera
+        window.addEventListener('beforeunload', function() {
+            if (cameraStream) {
+                stopCamera();
+            }
+        });
     </script>
 </body>
 </html>
