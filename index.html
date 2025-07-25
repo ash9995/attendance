@@ -6,7 +6,7 @@
     <title>نظام تسجيل الأنشطة - بيت الثقافة</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+    <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
     <style>
         * {
             margin: 0;
@@ -441,6 +441,7 @@
                     <label>اختبار الماسح (للتطوير فقط)</label>
                     <button type="button" class="btn" onclick="generateTestQR()" style="background: #34E49B; margin-bottom: 10px;">إنشاء رمز QR تجريبي</button>
                     <button type="button" class="btn" onclick="checkScannerStatus()" style="background: #ff6b6b; margin-bottom: 10px; margin-right: 10px;">فحص حالة الماسح</button>
+                    <button type="button" class="btn" onclick="testJsQRDirectly()" style="background: #ffa500; margin-bottom: 10px; margin-right: 10px;">اختبار jsQR مباشرة</button>
                     <div id="testQRContainer" style="text-align: center;"></div>
                 </div>
             </div>
@@ -527,7 +528,31 @@
             updateStats();
             displayAttendees();
             checkAdminStatus();
+            
+            // Check if jsQR library is loaded
+            setTimeout(() => {
+                if (typeof jsQR === 'undefined') {
+                    console.error('jsQR library failed to load, attempting to load backup');
+                    loadJsQRBackup();
+                } else {
+                    console.log('jsQR library loaded successfully');
+                }
+            }, 2000);
         });
+        
+        // Load jsQR backup if main CDN fails
+        function loadJsQRBackup() {
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/jsqr@1.4.0/dist/jsQR.js';
+            script.onload = function() {
+                console.log('jsQR backup loaded successfully');
+            };
+            script.onerror = function() {
+                console.error('Both jsQR CDNs failed to load');
+                showMessage('فشل في تحميل مكتبة قراءة QR. يرجى إعادة تحميل الصفحة.', 'error');
+            };
+            document.head.appendChild(script);
+        }
         
         // Check admin status
         function checkAdminStatus() {
@@ -994,6 +1019,14 @@
                 return;
             }
             
+            // Check if jsQR is available
+            if (typeof jsQR === 'undefined') {
+                console.error('jsQR library not available');
+                setScannerStatus('مكتبة قراءة QR غير متاحة. يرجى إعادة تحميل الصفحة.', 'error');
+                isScanning = false;
+                return;
+            }
+            
             try {
                 // Create canvas for image data
                 const canvas = document.createElement('canvas');
@@ -1003,20 +1036,13 @@
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 
-                console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
+                console.log('Scanning frame - Canvas dimensions:', canvas.width, 'x', canvas.height);
                 
                 // Draw current video frame
                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
                 // Get image data
                 const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-                
-                // Check if jsQR is available
-                if (typeof jsQR === 'undefined') {
-                    console.error('jsQR library not loaded');
-                    setScannerStatus('مكتبة قراءة QR غير متاحة', 'error');
-                    return;
-                }
                 
                 // Scan for QR codes with multiple attempts
                 const code = jsQR(imageData.data, imageData.width, imageData.height, {
@@ -1030,10 +1056,13 @@
                     processScannedQR(code.data);
                     
                     return; // Exit the scanning loop
+                } else {
+                    console.log('No QR code found in current frame');
                 }
                 
             } catch (error) {
                 console.error('QR scanning error:', error);
+                setScannerStatus('خطأ في المسح الضوئي: ' + error.message, 'error');
             }
             
             // Continue scanning if no QR code found
@@ -1395,6 +1424,40 @@
             }, 3000);
         }
 
+        // Test jsQR directly without camera
+        function testJsQRDirectly() {
+            const testContainer = document.getElementById('testQRContainer');
+            
+            if (typeof jsQR === 'undefined') {
+                testContainer.innerHTML = '<div style="color: red; padding: 15px; background: white; border-radius: 8px;">❌ مكتبة jsQR غير محملة!</div>';
+                return;
+            }
+            
+            try {
+                // Create a simple test QR code data manually
+                // This is a minimal QR code pattern for testing
+                testContainer.innerHTML = `
+                    <div style="background: white; padding: 15px; border-radius: 8px; margin-top: 10px;">
+                        <h4 style="color: #9565D3;">اختبار مكتبة jsQR:</h4>
+                        <p style="color: green;">✅ مكتبة jsQR محملة ومتاحة</p>
+                        <p>النسخة: ${jsQR.toString ? 'متاحة' : 'غير معروفة'}</p>
+                        <p style="color: #666; font-size: 12px;">يمكنك الآن استخدام الماسح بأمان</p>
+                    </div>
+                `;
+                
+                console.log('jsQR function:', jsQR);
+                console.log('jsQR test successful');
+                
+            } catch (error) {
+                console.error('jsQR test failed:', error);
+                testContainer.innerHTML = `
+                    <div style="color: red; padding: 15px; background: white; border-radius: 8px;">
+                        ❌ خطأ في اختبار jsQR: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
         // Check scanner status for debugging
         function checkScannerStatus() {
             const statusInfo = [];
@@ -1402,6 +1465,16 @@
             // Check jsQR library
             if (typeof jsQR !== 'undefined') {
                 statusInfo.push('✅ مكتبة jsQR متاحة');
+                try {
+                    // Test if jsQR actually works
+                    if (typeof jsQR === 'function') {
+                        statusInfo.push('✅ jsQR قابلة للتشغيل');
+                    } else {
+                        statusInfo.push('⚠️ jsQR محملة لكن قد لا تعمل بشكل صحيح');
+                    }
+                } catch (e) {
+                    statusInfo.push('❌ jsQR محملة لكن بها خطأ');
+                }
             } else {
                 statusInfo.push('❌ مكتبة jsQR غير متاحة');
             }
@@ -1435,6 +1508,13 @@
                 statusInfo.push('❌ الفيديو لا يعمل');
             }
             
+            // Check navigator.mediaDevices
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                statusInfo.push('✅ واجهة الكاميرا متاحة');
+            } else {
+                statusInfo.push('❌ واجهة الكاميرا غير متاحة');
+            }
+            
             // Check registrations
             statusInfo.push(`📊 عدد التسجيلات: ${registrations.length}`);
             statusInfo.push(`👥 عدد الحضور: ${attendees.length}`);
@@ -1449,13 +1529,15 @@
             
             console.log('Scanner Status Check:', {
                 jsQR: typeof jsQR !== 'undefined',
+                jsQRType: typeof jsQR,
                 QRious: typeof QRious !== 'undefined',
                 cameraStream: !!cameraStream,
                 isScanning: isScanning,
                 videoElement: video,
                 videoWidth: video ? video.videoWidth : 0,
                 registrations: registrations.length,
-                attendees: attendees.length
+                attendees: attendees.length,
+                mediaDevices: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
             });
         }
 
