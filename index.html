@@ -1090,37 +1090,54 @@
                     if (data.type === 'CULTURAL_CENTER_REGISTRATION' || data.t === 'CCR') {
                         // SMART QR code with full data (both old and new formats)
                         if (data.t === 'CCR') {
-                            // New optimized format - convert to standard format
+                            // New optimized format - convert to standard format with FULL data extraction
                             registrationData = {
                                 type: 'CULTURAL_CENTER_REGISTRATION',
                                 id: data.i,
                                 parent: {
-                                    name: data.p.n,
-                                    phone: data.p.ph,
-                                    nationality: data.p.nat,
-                                    gender: data.p.g
+                                    name: data.p.n || 'غير محدد',
+                                    phone: data.p.ph || 'غير متوفر',
+                                    nationality: data.p.nat || 'غير محدد',
+                                    gender: data.p.g || 'غير محدد'
                                 },
-                                children: data.c.map(child => ({
-                                    name: child.n,
-                                    age: child.a,
-                                    nationality: child.nat,
-                                    gender: child.g
+                                children: (data.c || []).map(child => ({
+                                    name: child.n || 'غير محدد',
+                                    age: child.a || 'غير محدد',
+                                    nationality: child.nat || 'غير محدد',
+                                    gender: child.g || 'غير محدد'
                                 })),
                                 dayInfo: {
-                                    date: data.d.dt,
-                                    name: data.d.nm
+                                    date: data.d ? data.d.dt : null,
+                                    name: data.d ? data.d.nm : 'غير محدد'
                                 },
-                                timestamp: data.ts,
-                                venue: data.vn,
-                                program: data.pr
+                                timestamp: data.ts || new Date().toISOString(),
+                                venue: data.vn || 'بيت الثقافة',
+                                program: data.pr || 'برنامج صيف ورث'
                             };
                             registrationId = data.i;
-                            console.log('Optimized Smart QR detected and converted');
+                            console.log('Optimized Smart QR detected and converted with full data:', registrationData);
                         } else {
-                            // Old format
-                            registrationData = data;
+                            // Old format - ensure all fields have defaults
+                            registrationData = {
+                                ...data,
+                                parent: {
+                                    name: data.parent?.name || 'غير محدد',
+                                    phone: data.parent?.phone || 'غير متوفر',
+                                    nationality: data.parent?.nationality || 'غير محدد',
+                                    gender: data.parent?.gender || 'غير محدد'
+                                },
+                                children: (data.children || []).map(child => ({
+                                    name: child.name || 'غير محدد',
+                                    age: child.age || 'غير محدد',
+                                    nationality: child.nationality || 'غير محدد',
+                                    gender: child.gender || 'غير محدد'
+                                })),
+                                dayInfo: data.dayInfo || { name: 'غير محدد' },
+                                venue: data.venue || 'بيت الثقافة',
+                                program: data.program || 'برنامج صيف ورث'
+                            };
                             registrationId = data.id;
-                            console.log('Legacy Smart QR detected');
+                            console.log('Legacy Smart QR detected with enhanced data:', registrationData);
                         }
                     } else if (data.id || data.i) {
                         // Legacy format - but treat as smart QR if has enough data
@@ -1159,38 +1176,69 @@
                         
                         // Try to extract other data from partial JSON (both formats)
                         const parentNameMatch = qrData.match(/"(?:name|n)":"([^"]+)"/);
+                        const phoneMatch = qrData.match(/"(?:phone|ph)":"([^"]+)"/);
+                        const nationalityMatch = qrData.match(/"(?:nationality|nat)":"([^"]+)"/);
+                        const genderMatch = qrData.match(/"(?:gender|g)":"([^"]+)"/);
                         const childrenCountMatch = qrData.match(/"(?:children|c)":\[([^\]]*)\]/);
+                        const dayNameMatch = qrData.match(/"(?:name|nm)":"([^"]+)"/);
                         
                         if (parentNameMatch) {
-                            // Create minimal registration data from partial QR
+                            // Create enhanced registration data from partial QR
                             registrationData = {
                                 type: 'PARTIAL_QR_RECOVERY',
                                 id: registrationId,
                                 parent: {
                                     name: parentNameMatch[1],
-                                    phone: 'غير متوفر',
-                                    nationality: 'غير محدد'
+                                    phone: phoneMatch ? phoneMatch[1] : 'غير متوفر',
+                                    nationality: nationalityMatch ? nationalityMatch[1] : 'غير محدد',
+                                    gender: genderMatch ? genderMatch[1] : 'غير محدد'
                                 },
                                 children: [],
-                                dayInfo: { name: 'غير محدد' },
+                                dayInfo: { 
+                                    name: dayNameMatch ? dayNameMatch[1] : 'غير محدد',
+                                    date: null
+                                },
                                 timestamp: new Date().toISOString(),
+                                venue: 'بيت الثقافة',
+                                program: 'برنامج صيف ورث',
                                 recovered: true
                             };
                             
-                            // Try to count children
+                            // Try to extract children data more intelligently
                             if (childrenCountMatch) {
                                 const childrenText = childrenCountMatch[1];
-                                const childCount = (childrenText.match(/\{/g) || []).length;
-                                for (let i = 0; i < childCount; i++) {
-                                    registrationData.children.push({
-                                        name: `الطفل ${i + 1}`,
-                                        age: 'غير محدد',
-                                        nationality: 'غير محدد'
+                                
+                                // Try to extract individual children
+                                const childMatches = childrenText.match(/\{[^}]+\}/g);
+                                if (childMatches) {
+                                    childMatches.forEach((childMatch, index) => {
+                                        const childNameMatch = childMatch.match(/"(?:name|n)":"([^"]+)"/);
+                                        const childAgeMatch = childMatch.match(/"(?:age|a)":(\d+)/);
+                                        const childNatMatch = childMatch.match(/"(?:nationality|nat)":"([^"]+)"/);
+                                        const childGenderMatch = childMatch.match(/"(?:gender|g)":"([^"]+)"/);
+                                        
+                                        registrationData.children.push({
+                                            name: childNameMatch ? childNameMatch[1] : `الطفل ${index + 1}`,
+                                            age: childAgeMatch ? childAgeMatch[1] : 'غير محدد',
+                                            nationality: childNatMatch ? childNatMatch[1] : 'غير محدد',
+                                            gender: childGenderMatch ? childGenderMatch[1] : 'غير محدد'
+                                        });
                                     });
+                                } else {
+                                    // Fallback: count braces
+                                    const childCount = (childrenText.match(/\{/g) || []).length;
+                                    for (let i = 0; i < childCount; i++) {
+                                        registrationData.children.push({
+                                            name: `الطفل ${i + 1}`,
+                                            age: 'غير محدد',
+                                            nationality: 'غير محدد',
+                                            gender: 'غير محدد'
+                                        });
+                                    }
                                 }
                             }
                             
-                            console.log('Recovered data from damaged QR:', registrationData);
+                            console.log('Enhanced recovery from damaged QR:', registrationData);
                         }
                     } else {
                         // Plain text ID
@@ -1299,6 +1347,12 @@
                 <p style="color: #28a745; font-size: 14px; margin-top: 15px; font-weight: bold;">
                     ✨ تم الحضور التلقائي بنجاح من رمز QR ذكي
                 </p>
+                
+                <div style="background: #e7f3ff; padding: 10px; border-radius: 8px; margin-top: 10px; border-left: 4px solid #2196f3;">
+                    <p style="color: #1976d2; font-size: 13px; margin: 0;">
+                        💡 <strong>ملاحظة:</strong> يمكنك الآن رؤية هذا الحضور في "لوحة الإدارة" وسيتم تضمينه في تقرير الإكسل
+                    </p>
+                </div>
             `, 'success');
             
             updateStats();
@@ -1400,23 +1454,75 @@
         
         // Update capacity display
         function updateCapacityDisplay() {
-            const totalRegistered = registrations.reduce((total, reg) => total + reg.children.length, 0);
-            const available = maxCapacity - totalRegistered;
+            // Count children from local registrations
+            const localChildren = registrations.reduce((total, reg) => total + reg.children.length, 0);
+            
+            // Count children from smart QR attendees (without local registration)
+            const smartQRChildren = attendees.filter(att => 
+                (att.source === 'smart_qr' || att.source === 'recovered_qr') &&
+                !registrations.find(reg => reg.id === att.registrationId)
+            ).reduce((total, att) => total + (att.children ? att.children.length : 0), 0);
+            
+            const totalRegistered = localChildren + smartQRChildren;
+            const available = Math.max(0, maxCapacity - totalRegistered);
+            
             document.getElementById('capacityDisplay').textContent = `المقاعد المتاحة: ${available} من ${maxCapacity}`;
+            
+            console.log('Capacity updated:', {
+                localChildren,
+                smartQRChildren,
+                totalRegistered,
+                available
+            });
         }
         
         // Update statistics
         function updateStats() {
-            const totalRegistrations = registrations.length;
-            const totalAttendees = attendees.length;
+            // Count local registrations
+            const localRegistrations = registrations.length;
+            const localAttendees = attendees.filter(att => 
+                registrations.find(reg => reg.id === att.registrationId)
+            ).length;
+            
+            // Count smart QR attendees (without local registration)
+            const smartQRAttendees = attendees.filter(att => 
+                (att.source === 'smart_qr' || att.source === 'recovered_qr') &&
+                !registrations.find(reg => reg.id === att.registrationId)
+            ).length;
+            
+            // Total counts
+            const totalRegistrations = localRegistrations + smartQRAttendees;
+            const totalAttendees = localAttendees + smartQRAttendees;
+            
+            // Calculate registered children from local registrations
             const registeredChildren = registrations.reduce((total, reg) => total + reg.children.length, 0);
-            const availableSpots = maxCapacity - registeredChildren;
+            
+            // Calculate children from smart QR attendees
+            const smartQRChildren = attendees.filter(att => 
+                (att.source === 'smart_qr' || att.source === 'recovered_qr') &&
+                !registrations.find(reg => reg.id === att.registrationId)
+            ).reduce((total, att) => total + (att.children ? att.children.length : 0), 0);
+            
+            const totalChildren = registeredChildren + smartQRChildren;
+            const availableSpots = maxCapacity - totalChildren;
+            
             const attendanceRate = totalRegistrations > 0 ? Math.round((totalAttendees / totalRegistrations) * 100) : 0;
             
+            // Update display
             document.getElementById('totalRegistrations').textContent = totalRegistrations;
             document.getElementById('totalAttendees').textContent = totalAttendees;
-            document.getElementById('availableSpots').textContent = availableSpots;
+            document.getElementById('availableSpots').textContent = Math.max(0, availableSpots);
             document.getElementById('attendanceRate').textContent = attendanceRate + '%';
+            
+            console.log('Stats updated:', {
+                totalRegistrations,
+                totalAttendees,
+                localRegistrations,
+                smartQRAttendees,
+                totalChildren,
+                availableSpots,
+                attendanceRate
+            });
         }
         
         // Display attendees list
@@ -1566,26 +1672,34 @@
             const totalAttended = allItems.filter(item => item.isAttended).length;
             const smartQRAttendees = allItems.filter(item => item.type === 'smart_qr_attendance').length;
             const localAttendees = totalAttended - smartQRAttendees;
+            const totalChildren = allItems.reduce((total, item) => total + (item.children ? item.children.length : 0), 0);
             
             summaryElement.innerHTML = `
-                <h3 style="margin: 0 0 15px 0;">📊 ملخص الحضور</h3>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; text-align: center;">
+                <h3 style="margin: 0 0 15px 0;">📊 ملخص الحضور المحدث</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; text-align: center;">
                     <div>
-                        <div style="font-size: 24px; font-weight: bold;">${totalRegistrations}</div>
-                        <div style="font-size: 12px;">إجمالي التسجيلات</div>
+                        <div style="font-size: 20px; font-weight: bold;">${totalRegistrations}</div>
+                        <div style="font-size: 11px;">إجمالي التسجيلات</div>
                     </div>
                     <div>
-                        <div style="font-size: 24px; font-weight: bold;">${totalAttended}</div>
-                        <div style="font-size: 12px;">إجمالي الحضور</div>
+                        <div style="font-size: 20px; font-weight: bold;">${totalAttended}</div>
+                        <div style="font-size: 11px;">إجمالي الحضور</div>
                     </div>
                     <div>
-                        <div style="font-size: 24px; font-weight: bold;">${smartQRAttendees}</div>
-                        <div style="font-size: 12px;">📱 حضور ذكي</div>
+                        <div style="font-size: 20px; font-weight: bold;">${smartQRAttendees}</div>
+                        <div style="font-size: 11px;">📱 حضور ذكي</div>
                     </div>
                     <div>
-                        <div style="font-size: 24px; font-weight: bold;">${localAttendees}</div>
-                        <div style="font-size: 12px;">💻 حضور محلي</div>
+                        <div style="font-size: 20px; font-weight: bold;">${localAttendees}</div>
+                        <div style="font-size: 11px;">💻 حضور محلي</div>
                     </div>
+                    <div>
+                        <div style="font-size: 20px; font-weight: bold;">${totalChildren}</div>
+                        <div style="font-size: 11px;">👶 إجمالي الأطفال</div>
+                    </div>
+                </div>
+                <div style="margin-top: 10px; font-size: 12px; opacity: 0.9;">
+                    آخر تحديث: ${new Date().toLocaleString('ar-SA')}
                 </div>
             `;
             
@@ -1602,59 +1716,113 @@
             try {
                 const data = [];
                 
-                // Export registrations
+                // Create a combined list of all registrations and attendees
+                const allItems = [];
+                
+                // Add local registrations
                 registrations.forEach(reg => {
                     const attendanceInfo = attendees.find(att => att.registrationId === reg.id);
                     const isAttended = !!attendanceInfo;
                     
-                    reg.children.forEach((child, index) => {
-                        data.push({
-                            'رقم التسجيل': reg.id,
-                            'يوم الحضور': reg.dayInfo ? reg.dayInfo.name : 'غير محدد',
-                            'تاريخ الحضور': reg.dayInfo ? reg.dayInfo.date : '',
-                            'اسم ولي الأمر': reg.parent.name,
-                            'عمر ولي الأمر': reg.parent.age,
-                            'جوال ولي الأمر': reg.parent.phone,
-                            'هوية/إقامة ولي الأمر': reg.parent.id,
-                            'جنس ولي الأمر': reg.parent.gender,
-                            'جنسية ولي الأمر': reg.parent.nationalityName || 'غير محدد',
-                            'اسم الطفل': child.name,
-                            'عمر الطفل': child.age,
-                            'هوية/إقامة الطفل': child.id,
-                            'جنس الطفل': child.gender,
-                            'جنسية الطفل': child.nationalityName || 'غير محدد',
-                            'حالة الحضور': isAttended ? 'حضر' : 'لم يحضر',
-                            'وقت الحضور': isAttended ? new Date(attendanceInfo.timestamp).toLocaleString('ar-SA') : '',
-                            'مصدر البيانات': 'تسجيل محلي'
-                        });
+                    allItems.push({
+                        id: reg.id,
+                        parentName: reg.parent.name,
+                        parentAge: reg.parent.age,
+                        parentPhone: reg.parent.phone,
+                        parentId: reg.parent.id,
+                        parentGender: reg.parent.gender,
+                        parentNationality: reg.parent.nationalityName,
+                        children: reg.children,
+                        dayInfo: reg.dayInfo,
+                        isAttended: isAttended,
+                        attendanceTime: attendanceInfo ? attendanceInfo.timestamp : null,
+                        source: 'تسجيل محلي',
+                        venue: 'بيت الثقافة',
+                        program: 'برنامج صيف ورث'
                     });
                 });
                 
-                // Export smart QR attendees that don't have local registrations
-                attendees.filter(att => att.source === 'smart_qr' && !registrations.find(reg => reg.id === att.registrationId))
+                // Add Smart QR attendees that don't have local registrations
+                attendees.filter(att => (att.source === 'smart_qr' || att.source === 'recovered_qr') && 
+                                   !registrations.find(reg => reg.id === att.registrationId))
                         .forEach(att => {
-                    att.children.forEach(child => {
-                        data.push({
-                            'رقم التسجيل': att.registrationId,
-                            'يوم الحضور': att.dayInfo ? att.dayInfo.name : 'غير محدد',
-                            'تاريخ الحضور': att.dayInfo ? att.dayInfo.date : '',
-                            'اسم ولي الأمر': att.parent.name,
-                            'عمر ولي الأمر': '-',
-                            'جوال ولي الأمر': att.parent.phone || '-',
-                            'هوية/إقامة ولي الأمر': '-',
-                            'جنس ولي الأمر': att.parent.gender || '-',
-                            'جنسية ولي الأمر': att.parent.nationality || 'غير محدد',
-                            'اسم الطفل': child.name,
-                            'عمر الطفل': child.age,
-                            'هوية/إقامة الطفل': '-',
-                            'جنس الطفل': child.gender || '-',
-                            'جنسية الطفل': child.nationality || 'غير محدد',
-                            'حالة الحضور': 'حضر',
-                            'وقت الحضور': new Date(att.timestamp).toLocaleString('ar-SA'),
-                            'مصدر البيانات': 'رمز QR ذكي'
-                        });
+                    allItems.push({
+                        id: att.registrationId,
+                        parentName: att.parent.name || 'غير محدد',
+                        parentAge: 'غير محدد',
+                        parentPhone: att.parent.phone || 'غير متوفر',
+                        parentId: 'غير محدد',
+                        parentGender: att.parent.gender || 'غير محدد',
+                        parentNationality: att.parent.nationality || 'غير محدد',
+                        children: att.children || [],
+                        dayInfo: att.dayInfo,
+                        isAttended: true,
+                        attendanceTime: att.timestamp,
+                        source: att.source === 'recovered_qr' ? 'رمز QR مسترد' : 'رمز QR ذكي',
+                        venue: att.venue || 'بيت الثقافة',
+                        program: att.program || 'برنامج صيف ورث'
                     });
                 });
+                
+                // Convert to Excel format
+                allItems.forEach(item => {
+                    if (item.children && item.children.length > 0) {
+                        // Create a row for each child
+                        item.children.forEach((child, index) => {
+                            data.push({
+                                'رقم التسجيل': item.id,
+                                'مصدر البيانات': item.source,
+                                'يوم الحضور': item.dayInfo ? item.dayInfo.name : 'غير محدد',
+                                'تاريخ الحضور': item.dayInfo ? item.dayInfo.date : 'غير محدد',
+                                'المكان': item.venue,
+                                'البرنامج': item.program,
+                                'اسم ولي الأمر': item.parentName,
+                                'عمر ولي الأمر': item.parentAge,
+                                'جوال ولي الأمر': item.parentPhone,
+                                'هوية/إقامة ولي الأمر': item.parentId,
+                                'جنس ولي الأمر': item.parentGender,
+                                'جنسية ولي الأمر': item.parentNationality,
+                                'اسم الطفل': child.name || 'غير محدد',
+                                'عمر الطفل': child.age || 'غير محدد',
+                                'هوية/إقامة الطفل': child.id || 'غير محدد',
+                                'جنس الطفل': child.gender || 'غير محدد',
+                                'جنسية الطفل': child.nationality || child.nationalityName || 'غير محدد',
+                                'حالة الحضور': item.isAttended ? 'حضر' : 'لم يحضر',
+                                'وقت الحضور': item.isAttended && item.attendanceTime ? 
+                                    new Date(item.attendanceTime).toLocaleString('ar-SA') : 'لم يحضر'
+                            });
+                        });
+                    } else {
+                        // No children data - create one row
+                        data.push({
+                            'رقم التسجيل': item.id,
+                            'مصدر البيانات': item.source,
+                            'يوم الحضور': item.dayInfo ? item.dayInfo.name : 'غير محدد',
+                            'تاريخ الحضور': item.dayInfo ? item.dayInfo.date : 'غير محدد',
+                            'المكان': item.venue,
+                            'البرنامج': item.program,
+                            'اسم ولي الأمر': item.parentName,
+                            'عمر ولي الأمر': item.parentAge,
+                            'جوال ولي الأمر': item.parentPhone,
+                            'هوية/إقامة ولي الأمر': item.parentId,
+                            'جنس ولي الأمر': item.parentGender,
+                            'جنسية ولي الأمر': item.parentNationality,
+                            'اسم الطفل': 'لا توجد بيانات أطفال',
+                            'عمر الطفل': '-',
+                            'هوية/إقامة الطفل': '-',
+                            'جنس الطفل': '-',
+                            'جنسية الطفل': '-',
+                            'حالة الحضور': item.isAttended ? 'حضر' : 'لم يحضر',
+                            'وقت الحضور': item.isAttended && item.attendanceTime ? 
+                                new Date(item.attendanceTime).toLocaleString('ar-SA') : 'لم يحضر'
+                        });
+                    }
+                });
+                
+                if (data.length === 0) {
+                    showMessage('لا توجد بيانات صالحة للتصدير', 'error');
+                    return;
+                }
                 
                 if (typeof XLSX === 'undefined') {
                     showMessage('مكتبة Excel غير متاحة', 'error');
@@ -1668,7 +1836,8 @@
                 const fileName = `تقرير_النشاط_الثقافي_${new Date().toISOString().split('T')[0]}.xlsx`;
                 XLSX.writeFile(wb, fileName);
                 
-                showMessage('تم تصدير البيانات بنجاح', 'success');
+                showMessage(`تم تصدير ${data.length} سجل بنجاح`, 'success');
+                console.log(`Exported ${data.length} records including smart QR attendees`);
                 
             } catch (error) {
                 console.error('Export failed:', error);
