@@ -496,7 +496,8 @@
                     <canvas id="qrCanvas" width="200" height="200" style="border: 2px solid #9565D3; border-radius: 8px; background: white;"></canvas>
                 </div>
                 <p style="color: #9565D3; margin-top: 20px;">احتفظ بهذا الرمز لتسجيل الحضور في بيت الثقافة</p>
-                <p style="color: #28a745; font-size: 14px; margin-top: 10px;">✨ رمز QR ذكي - يعمل على أي جهاز!</p>
+                <p style="color: #28a745; font-size: 14px; margin-top: 10px; font-weight: bold;">✨ رمز QR ذكي - يعمل على أي جهاز بدون مزامنة!</p>
+                <p style="color: #666; font-size: 12px; margin-top: 5px;">يحتوي الرمز على جميع بيانات التسجيل ويمكن مسحه من أي جهاز للحضور التلقائي</p>
                 <button class="btn" onclick="closeConfirmation()">إغلاق</button>
                 <button class="btn btn-success" onclick="printConfirmation()" style="margin-right: 10px;">طباعة</button>
             </div>
@@ -856,31 +857,34 @@
                 </div>
             `;
             
-            // Generate SMART QR code with ALL registration data
+            // Generate SMART QR code with ALL registration data (OPTIMIZED)
             const canvas = document.getElementById('qrCanvas');
             if (canvas && typeof QRious !== 'undefined') {
                 try {
-                    // SMART QR CODE - Contains everything needed for attendance
+                    // OPTIMIZED SMART QR CODE - Minimal but complete data
                     const smartQRData = {
-                        type: 'CULTURAL_CENTER_REGISTRATION',
-                        version: '1.0',
-                        id: registration.id,
-                        parent: {
-                            name: registration.parent.name,
-                            phone: registration.parent.phone,
-                            nationality: registration.parent.nationalityName,
-                            gender: registration.parent.gender
+                        t: 'CCR', // type: shortened
+                        v: '1.0', // version: shortened
+                        i: registration.id, // id: shortened
+                        p: { // parent: shortened
+                            n: registration.parent.name,
+                            ph: registration.parent.phone,
+                            nat: registration.parent.nationalityName,
+                            g: registration.parent.gender
                         },
-                        children: registration.children.map(child => ({
-                            name: child.name,
-                            age: child.age,
-                            nationality: child.nationalityName,
-                            gender: child.gender
+                        c: registration.children.map(child => ({ // children: shortened
+                            n: child.name,
+                            a: child.age,
+                            nat: child.nationalityName,
+                            g: child.gender
                         })),
-                        dayInfo: registration.dayInfo,
-                        timestamp: registration.timestamp,
-                        venue: 'بيت الثقافة',
-                        program: 'برنامج صيف ورث'
+                        d: { // dayInfo: shortened  
+                            dt: registration.dayInfo.date,
+                            nm: registration.dayInfo.name
+                        },
+                        ts: registration.timestamp, // timestamp
+                        vn: 'بيت الثقافة', // venue
+                        pr: 'برنامج صيف ورث' // program
                     };
                     
                     const qr = new QRious({
@@ -889,21 +893,23 @@
                         size: 200,
                         background: 'white',
                         foreground: '#9565D3',
-                        level: 'M'
+                        level: 'H' // HIGH error correction for better reliability
                     });
                     
-                    console.log('SMART QR Code generated:', smartQRData);
+                    console.log('OPTIMIZED Smart QR Code generated:', smartQRData);
                     
                 } catch (error) {
                     console.error('QR generation error:', error);
-                    // Fallback to simple ID
+                    // Fallback to ultra-simple QR with just ID
                     const qr = new QRious({
                         element: canvas,
                         value: registration.id,
                         size: 200,
                         background: 'white',
-                        foreground: '#9565D3'
+                        foreground: '#9565D3',
+                        level: 'H'
                     });
+                    console.log('Fallback to simple ID QR');
                 }
             }
             
@@ -1081,33 +1087,116 @@
                 try {
                     const data = JSON.parse(qrData);
                     
-                    if (data.type === 'CULTURAL_CENTER_REGISTRATION') {
-                        // SMART QR code with full data - THIS IS WHAT WE WANT!
-                        registrationData = data;
-                        registrationId = data.id;
-                        console.log('Smart QR detected - processing directly');
-                    } else if (data.id) {
-                        // Legacy format - but treat as smart QR if has enough data
-                        if (data.parent && data.children && data.dayInfo) {
+                    if (data.type === 'CULTURAL_CENTER_REGISTRATION' || data.t === 'CCR') {
+                        // SMART QR code with full data (both old and new formats)
+                        if (data.t === 'CCR') {
+                            // New optimized format - convert to standard format
                             registrationData = {
                                 type: 'CULTURAL_CENTER_REGISTRATION',
-                                id: data.id,
-                                parent: data.parent,
-                                children: data.children,
-                                dayInfo: data.dayInfo,
-                                timestamp: data.timestamp
+                                id: data.i,
+                                parent: {
+                                    name: data.p.n,
+                                    phone: data.p.ph,
+                                    nationality: data.p.nat,
+                                    gender: data.p.g
+                                },
+                                children: data.c.map(child => ({
+                                    name: child.n,
+                                    age: child.a,
+                                    nationality: child.nat,
+                                    gender: child.g
+                                })),
+                                dayInfo: {
+                                    date: data.d.dt,
+                                    name: data.d.nm
+                                },
+                                timestamp: data.ts,
+                                venue: data.vn,
+                                program: data.pr
                             };
+                            registrationId = data.i;
+                            console.log('Optimized Smart QR detected and converted');
+                        } else {
+                            // Old format
+                            registrationData = data;
                             registrationId = data.id;
+                            console.log('Legacy Smart QR detected');
+                        }
+                    } else if (data.id || data.i) {
+                        // Legacy format - but treat as smart QR if has enough data
+                        const id = data.id || data.i;
+                        if ((data.parent || data.p) && (data.children || data.c) && (data.dayInfo || data.d)) {
+                            registrationData = {
+                                type: 'CULTURAL_CENTER_REGISTRATION',
+                                id: id,
+                                parent: data.parent || {
+                                    name: data.p?.n || 'غير محدد',
+                                    phone: data.p?.ph || 'غير متوفر',
+                                    nationality: data.p?.nat || 'غير محدد'
+                                },
+                                children: data.children || data.c || [],
+                                dayInfo: data.dayInfo || {
+                                    date: data.d?.dt,
+                                    name: data.d?.nm
+                                },
+                                timestamp: data.timestamp || data.ts
+                            };
+                            registrationId = id;
                             console.log('Legacy QR converted to smart format');
                         } else {
-                            registrationId = data.id;
+                            registrationId = id;
                             console.log('Simple ID QR detected');
                         }
                     }
-                } catch (e) {
-                    // Plain text ID
-                    registrationId = qrData.trim();
-                    console.log('Plain text QR detected');
+                } catch (jsonError) {
+                    console.log('JSON parsing failed:', jsonError.message);
+                    
+                    // Try to extract ID from partial JSON (both old and new formats)
+                    const idMatch = qrData.match(/"(?:id|i)":"(\d+)"/);
+                    if (idMatch) {
+                        registrationId = idMatch[1];
+                        console.log('Extracted ID from damaged QR:', registrationId);
+                        
+                        // Try to extract other data from partial JSON (both formats)
+                        const parentNameMatch = qrData.match(/"(?:name|n)":"([^"]+)"/);
+                        const childrenCountMatch = qrData.match(/"(?:children|c)":\[([^\]]*)\]/);
+                        
+                        if (parentNameMatch) {
+                            // Create minimal registration data from partial QR
+                            registrationData = {
+                                type: 'PARTIAL_QR_RECOVERY',
+                                id: registrationId,
+                                parent: {
+                                    name: parentNameMatch[1],
+                                    phone: 'غير متوفر',
+                                    nationality: 'غير محدد'
+                                },
+                                children: [],
+                                dayInfo: { name: 'غير محدد' },
+                                timestamp: new Date().toISOString(),
+                                recovered: true
+                            };
+                            
+                            // Try to count children
+                            if (childrenCountMatch) {
+                                const childrenText = childrenCountMatch[1];
+                                const childCount = (childrenText.match(/\{/g) || []).length;
+                                for (let i = 0; i < childCount; i++) {
+                                    registrationData.children.push({
+                                        name: `الطفل ${i + 1}`,
+                                        age: 'غير محدد',
+                                        nationality: 'غير محدد'
+                                    });
+                                }
+                            }
+                            
+                            console.log('Recovered data from damaged QR:', registrationData);
+                        }
+                    } else {
+                        // Plain text ID
+                        registrationId = qrData.trim();
+                        console.log('Plain text QR detected');
+                    }
                 }
                 
                 if (!registrationId) {
@@ -1124,15 +1213,21 @@
                 }
                 
                 if (registrationData) {
-                    // Smart QR - has all data, mark attendance directly (PREFERRED METHOD)
+                    // Smart QR or recovered data - mark attendance directly
                     markAttendanceFromSmartQR(registrationData);
                 } else {
                     // Fallback: QR code doesn't have complete data
                     showAttendanceResult(`
-                        <h4 style="color: #dc3545;">❌ رمز QR غير مكتمل</h4>
+                        <h4 style="color: #dc3545;">❌ رمز QR تالف أو مقطوع</h4>
                         <p>رقم التسجيل: ${registrationId}</p>
-                        <p style="font-size: 14px; color: #666;">هذا الرمز لا يحتوي على البيانات الكاملة المطلوبة للحضور التلقائي</p>
-                        <p style="font-size: 14px; color: #28a745;">💡 تأكد من استخدام رموز QR الجديدة التي تم إنشاؤها من النظام المحدث</p>
+                        <p style="font-size: 14px; color: #666;">البيانات في رمز QR مقطوعة أو تالفة. قد يكون الرمز كبير جداً أو تالف.</p>
+                        <p style="font-size: 14px; color: #28a745;">💡 <strong>الحلول:</strong></p>
+                        <ul style="font-size: 13px; color: #666; text-align: right; margin: 10px 20px;">
+                            <li>تأكد من وضوح رمز QR</li>
+                            <li>اقترب أكثر من الرمز</li>
+                            <li>تأكد من إضاءة جيدة</li>
+                            <li>أو استخدم الإدخال اليدوي أدناه</li>
+                        </ul>
                     `, 'error');
                     resumeScanningAfterDelay(4000);
                 }
@@ -1156,7 +1251,7 @@
                 dayInfo: qrData.dayInfo,
                 venue: qrData.venue || 'بيت الثقافة',
                 program: qrData.program || 'برنامج صيف ورث',
-                source: 'smart_qr'
+                source: qrData.recovered ? 'recovered_qr' : 'smart_qr'
             };
             
             attendees.push(attendance);
@@ -1166,8 +1261,16 @@
             const childrenText = qrData.children.length === 1 ? 'طفل واحد' : `${qrData.children.length} أطفال`;
             const childrenNames = qrData.children.map(child => `• ${child.name} (${child.age} سنة)`).join('<br>');
             
+            const successTitle = qrData.recovered ? 
+                '✅ تم تسجيل الحضور بنجاح! (بيانات مستردة)' : 
+                '✅ تم تسجيل الحضور بنجاح!';
+            
+            const recoveryNote = qrData.recovered ? 
+                '<p style="color: #ffc107; font-size: 13px; margin-top: 10px;"><strong>⚠️ ملاحظة:</strong> تم استرداد البيانات من رمز QR تالف جزئياً</p>' : 
+                '';
+            
             showAttendanceResult(`
-                <h3 style="color: #28a745; margin-bottom: 15px;">✅ تم تسجيل الحضور بنجاح!</h3>
+                <h3 style="color: #28a745; margin-bottom: 15px;">${successTitle}</h3>
                 
                 <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: right;">
                     <p><strong>👤 ولي الأمر:</strong> ${qrData.parent.name}</p>
@@ -1190,6 +1293,8 @@
                     <p><strong>🕐 وقت تسجيل الحضور:</strong> ${new Date().toLocaleString('ar-SA')}</p>
                     <p><strong>📍 المكان:</strong> ${qrData.venue || 'بيت الثقافة'}</p>
                 </div>
+                
+                ${recoveryNote}
                 
                 <p style="color: #28a745; font-size: 14px; margin-top: 15px; font-weight: bold;">
                     ✨ تم الحضور التلقائي بنجاح من رمز QR ذكي
