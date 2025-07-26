@@ -1431,80 +1431,165 @@
                 return;
             }
             
-            // Show local registrations
+            // Create combined list of all registrations and smart QR attendees
+            const allItems = [];
+            
+            // Add local registrations
             registrations.forEach(reg => {
-                const isAttended = attendees.some(att => att.registrationId === reg.id);
                 const attendanceInfo = attendees.find(att => att.registrationId === reg.id);
+                const isAttended = !!attendanceInfo;
                 
-                const item = document.createElement('div');
-                item.className = 'attendee-item';
-                item.style.borderLeftColor = isAttended ? '#34E49B' : '#D97E5C';
-                
-                let childrenList = '';
-                reg.children.forEach(child => {
-                    childrenList += `<li>${child.name} (${child.age} سنة) - ${child.nationalityName} - ${child.id}</li>`;
+                allItems.push({
+                    type: 'local_registration',
+                    id: reg.id,
+                    parentName: reg.parent.name,
+                    parentPhone: reg.parent.phone,
+                    parentNationality: reg.parent.nationalityName,
+                    children: reg.children,
+                    dayInfo: reg.dayInfo,
+                    isAttended: isAttended,
+                    attendanceTime: attendanceInfo ? attendanceInfo.timestamp : null,
+                    source: 'تسجيل محلي'
                 });
-                
-                item.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div>
-                            <h4 style="color: #9565D3;">${reg.parent.name} (تسجيل محلي)</h4>
-                            <p><strong>رقم التسجيل:</strong> ${reg.id}</p>
-                            <p><strong>يوم الحضور:</strong> ${reg.dayInfo ? reg.dayInfo.name : 'غير محدد'}</p>
-                            <p><strong>الجنسية:</strong> ${reg.parent.nationalityName}</p>
-                            <p><strong>الجوال:</strong> ${reg.parent.phone}</p>
-                            <p><strong>الأطفال:</strong></p>
-                            <ul style="margin-right: 20px;">${childrenList}</ul>
-                            ${isAttended ? `<p style="color: #34E49B;"><strong>وقت الحضور:</strong> ${new Date(attendanceInfo.timestamp).toLocaleString('ar-SA')}</p>` : ''}
-                        </div>
-                        <div style="text-align: center;">
-                            <span style="background: ${isAttended ? '#34E49B' : '#D97E5C'}; color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px;">
-                                ${isAttended ? 'حضر' : 'لم يحضر'}
-                            </span>
-                        </div>
-                    </div>
-                `;
-                
-                container.appendChild(item);
             });
             
-            // Show Smart QR attendees that don't have local registrations
-            attendees.filter(att => att.source === 'smart_qr' && !registrations.find(reg => reg.id === att.registrationId))
+            // Add Smart QR attendees that don't have local registrations
+            attendees.filter(att => (att.source === 'smart_qr' || att.source === 'recovered_qr') && 
+                               !registrations.find(reg => reg.id === att.registrationId))
                     .forEach(att => {
-                const item = document.createElement('div');
-                item.className = 'attendee-item';
-                item.style.borderLeftColor = '#34E49B'; // Always attended since they're in attendees list
+                allItems.push({
+                    type: 'smart_qr_attendance',
+                    id: att.registrationId,
+                    parentName: att.parent.name,
+                    parentPhone: att.parent.phone || 'غير متوفر',
+                    parentNationality: att.parent.nationality || 'غير محدد',
+                    children: att.children || [],
+                    dayInfo: att.dayInfo,
+                    isAttended: true, // Always attended since they're in attendees list
+                    attendanceTime: att.timestamp,
+                    source: att.source === 'recovered_qr' ? 'رمز QR مسترد' : 'رمز QR ذكي',
+                    venue: att.venue,
+                    program: att.program
+                });
+            });
+            
+            // Sort by attendance time (newest first)
+            allItems.sort((a, b) => {
+                if (a.isAttended && b.isAttended) {
+                    return new Date(b.attendanceTime) - new Date(a.attendanceTime);
+                }
+                if (a.isAttended && !b.isAttended) return -1;
+                if (!a.isAttended && b.isAttended) return 1;
+                return 0;
+            });
+            
+            // Display all items
+            allItems.forEach(item => {
+                const itemElement = document.createElement('div');
+                itemElement.className = 'attendee-item';
+                itemElement.style.borderLeftColor = item.isAttended ? '#34E49B' : '#D97E5C';
                 
                 let childrenList = '';
-                if (att.children && att.children.length > 0) {
-                    att.children.forEach(child => {
-                        childrenList += `<li>${child.name} (${child.age} سنة) - ${child.nationality || 'غير محدد'}</li>`;
+                if (item.children && item.children.length > 0) {
+                    item.children.forEach(child => {
+                        const childId = child.id ? ` - ${child.id}` : '';
+                        childrenList += `<li>${child.name} (${child.age} سنة) - ${child.nationality || child.nationalityName || 'غير محدد'}${childId}</li>`;
                     });
                 }
                 
-                item.innerHTML = `
+                const sourceIcon = item.type === 'smart_qr_attendance' ? '📱' : '💻';
+                const sourceColor = item.type === 'smart_qr_attendance' ? '#28a745' : '#6c757d';
+                
+                itemElement.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div>
-                            <h4 style="color: #9565D3;">${att.parent.name} <span style="color: #28a745; font-size: 12px;">(حضور من رمز QR ذكي)</span></h4>
-                            <p><strong>رقم التسجيل:</strong> ${att.registrationId}</p>
-                            <p><strong>يوم الحضور:</strong> ${att.dayInfo ? att.dayInfo.name : 'غير محدد'}</p>
-                            <p><strong>الجنسية:</strong> ${att.parent.nationality || 'غير محدد'}</p>
-                            <p><strong>الجوال:</strong> ${att.parent.phone || 'غير متوفر'}</p>
-                            <p><strong>المكان:</strong> ${att.venue || 'بيت الثقافة'}</p>
-                            <p><strong>البرنامج:</strong> ${att.program || 'برنامج صيف ورث'}</p>
-                            ${childrenList ? `<p><strong>الأطفال:</strong></p><ul style="margin-right: 20px;">${childrenList}</ul>` : ''}
-                            <p style="color: #34E49B;"><strong>وقت الحضور:</strong> ${new Date(att.timestamp).toLocaleString('ar-SA')}</p>
+                        <div style="flex: 1;">
+                            <h4 style="color: #9565D3; margin-bottom: 8px;">
+                                ${sourceIcon} ${item.parentName} 
+                                <span style="color: ${sourceColor}; font-size: 12px; font-weight: normal;">(${item.source})</span>
+                            </h4>
+                            
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin: 10px 0;">
+                                <p><strong>📋 رقم التسجيل:</strong> ${item.id}</p>
+                                <p><strong>📅 يوم الحضور:</strong> ${item.dayInfo ? item.dayInfo.name : 'غير محدد'}</p>
+                                <p><strong>🌍 الجنسية:</strong> ${item.parentNationality}</p>
+                                <p><strong>📱 الجوال:</strong> ${item.parentPhone}</p>
+                                
+                                ${item.venue ? `<p><strong>📍 المكان:</strong> ${item.venue}</p>` : ''}
+                                ${item.program ? `<p><strong>🎯 البرنامج:</strong> ${item.program}</p>` : ''}
+                                
+                                <p><strong>👶 عدد الأطفال:</strong> ${item.children.length}</p>
+                                ${childrenList ? `
+                                    <details style="margin-top: 10px;">
+                                        <summary style="cursor: pointer; color: #9565D3; font-weight: bold;">عرض تفاصيل الأطفال</summary>
+                                        <ul style="margin: 10px 0 0 20px; font-size: 14px;">${childrenList}</ul>
+                                    </details>
+                                ` : ''}
+                                
+                                ${item.isAttended ? `
+                                    <div style="background: #d4edda; padding: 8px; border-radius: 5px; margin-top: 10px;">
+                                        <p style="color: #155724; margin: 0;"><strong>✅ وقت الحضور:</strong> ${new Date(item.attendanceTime).toLocaleString('ar-SA')}</p>
+                                    </div>
+                                ` : `
+                                    <div style="background: #f8d7da; padding: 8px; border-radius: 5px; margin-top: 10px;">
+                                        <p style="color: #721c24; margin: 0;"><strong>⏳ لم يحضر بعد</strong></p>
+                                    </div>
+                                `}
+                            </div>
                         </div>
-                        <div style="text-align: center;">
-                            <span style="background: #34E49B; color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px;">
-                                حضر ✨
+                        
+                        <div style="text-align: center; margin-right: 15px;">
+                            <span style="background: ${item.isAttended ? '#34E49B' : '#D97E5C'}; color: white; padding: 8px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; display: block; margin-bottom: 5px;">
+                                ${item.isAttended ? '✅ حضر' : '⏳ لم يحضر'}
                             </span>
+                            <div style="font-size: 10px; color: #666; text-align: center;">
+                                ${item.type === 'smart_qr_attendance' ? 'تلقائي' : 'محلي'}
+                            </div>
                         </div>
                     </div>
                 `;
                 
-                container.appendChild(item);
+                container.appendChild(itemElement);
             });
+            
+            // Add summary at the top
+            const summaryElement = document.createElement('div');
+            summaryElement.style.cssText = `
+                background: linear-gradient(135deg, #9565D3, #34E49B); 
+                color: white; 
+                padding: 20px; 
+                border-radius: 10px; 
+                margin-bottom: 20px; 
+                text-align: center;
+            `;
+            
+            const totalRegistrations = allItems.length;
+            const totalAttended = allItems.filter(item => item.isAttended).length;
+            const smartQRAttendees = allItems.filter(item => item.type === 'smart_qr_attendance').length;
+            const localAttendees = totalAttended - smartQRAttendees;
+            
+            summaryElement.innerHTML = `
+                <h3 style="margin: 0 0 15px 0;">📊 ملخص الحضور</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; text-align: center;">
+                    <div>
+                        <div style="font-size: 24px; font-weight: bold;">${totalRegistrations}</div>
+                        <div style="font-size: 12px;">إجمالي التسجيلات</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 24px; font-weight: bold;">${totalAttended}</div>
+                        <div style="font-size: 12px;">إجمالي الحضور</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 24px; font-weight: bold;">${smartQRAttendees}</div>
+                        <div style="font-size: 12px;">📱 حضور ذكي</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 24px; font-weight: bold;">${localAttendees}</div>
+                        <div style="font-size: 12px;">💻 حضور محلي</div>
+                    </div>
+                </div>
+            `;
+            
+            container.insertBefore(summaryElement, container.firstChild);
         }
         
         // Export to Excel
